@@ -1,3 +1,6 @@
 [submodule "sage_dev"]
 	path = sage_dev
 	url = git@github.com:will-snavely/sage_dev.git
+[submodule "projects/usctdp-bedrock"]
+	path = projects/usctdp-bedrock
+	url = git@github.com:will-snavely/usctdp-bedrock.git
