@@ -1,0 +1,40 @@
+# https://taskfile.dev
+
+version: '3'
+
+vars:
+  MODE: '{{.MODE | default "dev"}}'
+
+tasks:
+  up:
+    cmds:
+      - > 
+        docker compose --env-file .env
+        -f sage_dev/compose.yaml 
+        -f sage_dev/compose.{{.MODE}}.yaml 
+        up -d
+
+  down:
+    cmds:
+      - >
+        docker compose  --env-file .env 
+        -f sage_dev/compose.yaml 
+        -f sage_dev/compose.{{.MODE}}.yaml 
+        down
+
+  deploy:
+    cmds:
+      - >
+        python3 sage_dev/sage.py build 
+        --project usctdp-bedrock --theme usctdp-theme
+      - >
+        python3 sage_dev/bedrock.py deploy
+        --name usctdp-bedrock
+
+  shell-web:
+    cmds:
+      - >
+        docker compose --env-file .env 
+        -f sage_dev/compose.yaml 
+        -f sage_dev/compose.{{.MODE}}.yaml 
+        exec web bash 
