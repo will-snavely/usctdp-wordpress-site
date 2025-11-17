@@ -4,8 +4,21 @@ version: '3'
 
 vars:
   MODE: '{{.MODE | default "dev"}}'
+  DEV_GROUP_NAME: '{{.DEV_GROUP_NAME | default "devs"}}'
+  DEV_GROUP_ID: '{{.DEV_GROUP_ID | default "2001"}}'
 
 tasks:
+  update_perms:
+    cmds:
+      - sudo groupadd -g {{.DEV_GROUP_ID}} {{.DEV_GROUP_NAME}}
+      - sudo usermod -a -G {{.DEV_GROUP_NAME}} $USER
+      - sudo chgrp -R {{.DEV_GROUP_NAME}} projects
+      - sudo chmod g+rw projects
+
+  clean_perms:
+    cmds:
+      - sudo groupdel {{.DEV_GROUP_NAME}}
+
   up:
     cmds:
       - > 
