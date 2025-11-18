@@ -8,7 +8,7 @@ vars:
   DEV_GROUP_ID: '{{.DEV_GROUP_ID | default "2001"}}'
 
 tasks:
-  update_perms:
+  init_perms:
     cmds:
       - sudo groupadd -g {{.DEV_GROUP_ID}} {{.DEV_GROUP_NAME}}
       - sudo usermod -a -G {{.DEV_GROUP_NAME}} $USER
@@ -42,7 +42,7 @@ tasks:
         --project usctdp-bedrock --theme usctdp-theme
       - >
         python3 sage_dev/bedrock.py deploy
-        --name usctdp-bedrock
+        --name usctdp-bedrock --chmod
 
   shell-web:
     cmds:
