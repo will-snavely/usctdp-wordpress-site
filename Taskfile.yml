@@ -8,16 +8,18 @@ vars:
   DEV_GROUP_ID: '{{.DEV_GROUP_ID | default "2001"}}'
 
 tasks:
-  init_perms:
+  init:
     cmds:
-      - sudo groupadd -g {{.DEV_GROUP_ID}} {{.DEV_GROUP_NAME}}
+      - sudo groupadd -fg {{.DEV_GROUP_ID}} {{.DEV_GROUP_NAME}}
       - sudo usermod -a -G {{.DEV_GROUP_NAME}} $USER
       - sudo chgrp -R {{.DEV_GROUP_NAME}} projects
       - sudo chmod -R g+rw projects
-
-  clean_perms:
-    cmds:
-      - sudo groupdel {{.DEV_GROUP_NAME}}
+      - cat /dev/urandom | tr -dc 'a-zA-Z0-9' | head -c 10 > .secret_db_password_dev
+      - cat /dev/urandom | tr -dc 'a-zA-Z0-9' | head -c 10 > .secret_db_root_password_dev
+      - >
+        sed "s|PATH_TO_DB_PASSWORD_FILE|${PWD}/.secret_db_password_dev|" .env.example
+        | sed "s|PATH_TO_DB_ROOT_PASSWORD_FILE|${PWD}/.secret_db_root_password_dev|"
+        | sed "s|PATH_TO_PROJECTS_FILE|${PWD}/projects|" > .env
 
   up:
     cmds:
@@ -42,6 +44,7 @@ tasks:
         -f sage_dev/compose.yaml 
         -f sage_dev/compose.{{.MODE}}.yaml 
         down -v
+      - sudo groupdel {{.DEV_GROUP_NAME}}
 
   deploy:
     cmds:
