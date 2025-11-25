@@ -44,7 +44,10 @@ tasks:
         -f sage_dev/compose.yaml 
         -f sage_dev/compose.{{.MODE}}.yaml 
         down -v
-      - sudo groupdel {{.DEV_GROUP_NAME}}
+      - sudo rm -f projects/usctdp-bedrock/.env
+      - sudo rm -rf projects/usctdp-bedrock/vendor
+      - sudo rm -rf projects/usctdp-bedrock/web/app/themes/usctdp-theme/vendor
+      - sudo rm -rf projects/usctdp-bedrock/web/app/themes/usctdp-theme/node_modules
 
   deploy:
     cmds:
