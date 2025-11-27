@@ -4,22 +4,17 @@ version: '3'
 
 vars:
   MODE: '{{.MODE | default "dev"}}'
-  DEV_GROUP_NAME: '{{.DEV_GROUP_NAME | default "devs"}}'
-  DEV_GROUP_ID: '{{.DEV_GROUP_ID | default "2001"}}'
 
 tasks:
   init:
     cmds:
-      - sudo groupadd -fg {{.DEV_GROUP_ID}} {{.DEV_GROUP_NAME}}
-      - sudo usermod -a -G {{.DEV_GROUP_NAME}} $USER
-      - sudo chgrp -R {{.DEV_GROUP_NAME}} projects
-      - sudo chmod -R g+rw projects
       - cat /dev/urandom | tr -dc 'a-zA-Z0-9' | head -c 10 > .secret_db_password_dev
       - cat /dev/urandom | tr -dc 'a-zA-Z0-9' | head -c 10 > .secret_db_root_password_dev
       - >
-        sed "s|PATH_TO_DB_PASSWORD_FILE|${PWD}/.secret_db_password_dev|" .env.example
+        sed "s|PATH_TO_DB_PASSWORD_FILE|${PWD}/.secret_db_password_dev|" .env.template
         | sed "s|PATH_TO_DB_ROOT_PASSWORD_FILE|${PWD}/.secret_db_root_password_dev|"
         | sed "s|PATH_TO_PROJECTS_FILE|${PWD}/projects|" > .env
+      - python3 config.py .env
 
   up:
     cmds:
