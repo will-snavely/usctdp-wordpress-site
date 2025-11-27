@@ -1,0 +1,23 @@
+{
+  "name": "usctdp-wordpress-site",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {},
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/will-snavely/usctdp-wordpress-site.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/will-snavely/usctdp-wordpress-site/issues"
+  },
+  "homepage": "https://github.com/will-snavely/usctdp-wordpress-site#readme",
+  "devDependencies": {
+    "@playwright/test": "^1.57.0",
+    "@types/node": "^24.10.1"
+  }
+}
