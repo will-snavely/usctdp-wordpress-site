@@ -53,10 +53,18 @@ tasks:
         python3 sage_dev/bedrock.py deploy
         --name usctdp-bedrock --chmod
 
-  shell-web:
+  shell-web-root:
     cmds:
       - >
         docker compose --env-file .env 
         -f sage_dev/compose.yaml 
         -f sage_dev/compose.{{.MODE}}.yaml 
         exec web bash 
+
+  shell-web:
+    cmds:
+      - >
+        docker compose --env-file .env 
+        -f sage_dev/compose.yaml 
+        -f sage_dev/compose.{{.MODE}}.yaml 
+        exec --user www-data web bash 
