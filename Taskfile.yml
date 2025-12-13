@@ -43,6 +43,7 @@ tasks:
       - sudo rm -rf projects/usctdp-bedrock/vendor
       - sudo rm -rf projects/usctdp-bedrock/web/app/themes/usctdp-theme/vendor
       - sudo rm -rf projects/usctdp-bedrock/web/app/themes/usctdp-theme/node_modules
+      - sudo rm -rf projects/usctdp-bedrock/web/app/plugins/usctdp-mgmt/vendor
 
   deploy:
     cmds:

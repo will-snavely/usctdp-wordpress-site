@@ -55,20 +55,6 @@ def init(config):
         print(f"[config.py] {' '.join(cmd)}")
         subprocess.run(cmd, check=True)
 
-    """
-    hosts_mappings = read_hosts_file()
-    local_ip = '127.0.0.1'
-    mapped_hostname = site_url.split('://')[1]
-    if local_ip not in hosts_mappings:
-        print(f"[config.py] Adding {local_ip} {mapped_hostname} to /etc/hosts")
-        subprocess.run(['sudo', 'echo', f'{local_ip} {mapped_hostname}', '>>', '/etc/hosts'], check=True)
-    else:
-        if mapped_hostname not in hosts_mappings[local_ip]:
-            print(f"[config.py] Updating {local_ip} in /etc/hosts")
-            subprocess.run(['sudo', 'sed', '-i', f'/{local_ip}/s/$/ {mapped_hostname}/', '/etc/hosts'], check=True)
-        else:
-            print(f"[config.py] {local_ip} {mapped_hostname} already exists in /etc/hosts")
-    """
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('env_file', type=str, help='Path to the .env file') 
