@@ -104,3 +104,11 @@ tasks:
         -f sage_dev/compose.yaml 
         -f sage_dev/compose.{{.MODE}}.yaml 
         exec --user www-data web tail -f /www/srv/usctdp-bedrock/web/wp/wp-admin/debug.log
+
+  sql:
+    cmds:
+      - >
+        docker compose --env-file .env 
+        -f sage_dev/compose.yaml 
+        -f sage_dev/compose.{{.MODE}}.yaml 
+        exec db mariadb -u root -p
