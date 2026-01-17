@@ -19,30 +19,10 @@ class EnvConfig:
     def get(self, key):
         return self.env_vars.get(key)
 
-def read_hosts_file():
-    hosts_mappings = OrderedDict()
-    try:
-        with open('/etc/hosts', 'r') as f:
-            for line in f:
-                line = line.strip()
-                if not line or line.startswith('#'):
-                    continue
-                parts = line.split()
-                if len(parts) >= 2:
-                    ip_address = parts[0]
-                    hostnames = parts[1:]
-                    hosts_mappings[ip_address] = hostnames
-    except FileNotFoundError:
-        print(f"Error: hosts file not found at /etc/hosts")
-    except Exception as e:
-        print(f"Error parsing hosts file: {e}")
-    
-    return hosts_mappings
 
 def init(config):
     dev_group_id = config.get('DEV_GROUP_ID')
     dev_group_name = config.get('LOCAL_DEV_GROUP_NAME')
-    site_url = config.get('SITE_URL')
 
     commands = [
         ['sudo', 'groupadd', '-fg', dev_group_id, dev_group_name],

@@ -32,6 +32,14 @@ tasks:
         -f sage_dev/compose.{{.MODE}}.yaml 
         down
 
+  docker-logs:
+    cmds:
+      - >
+        docker compose  --env-file .env 
+        -f sage_dev/compose.yaml 
+        -f sage_dev/compose.{{.MODE}}.yaml 
+        logs
+
   clean:
     cmds:
       - >
@@ -97,7 +105,7 @@ tasks:
         -f sage_dev/compose.{{.MODE}}.yaml 
         exec --user www-data web bash 
 
-  tail-log:
+  wp-log:
     cmds:
       - >
         docker compose --env-file .env 
