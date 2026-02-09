@@ -62,6 +62,11 @@ tasks:
         python3 sage_dev/bedrock.py deploy
         --name usctdp-bedrock --chmod
 
+  dev-perms:
+    cmds:
+      - sudo chgrp -R usctdp_devs projects
+      - sudo chmod -R g+rw projects
+
   test-data-init:
     cmds:
       - >
