@@ -3,7 +3,13 @@
 version: '3'
 
 vars:
-  MODE: '{{.MODE | default "dev"}}'
+  MODE: "dev"
+  PROJECT_NAME: "usctdp_{{.MODE}}"
+  DOCKER_COMPOSE: "docker compose --env-file .env -p {{.PROJECT_NAME}} -f sage_dev/compose.{{.MODE}}.yaml" 
+  WP_HOME: /www/srv/usctdp-bedrock/web/wp
+  WP_LOG: /www/srv/usctdp-bedrock/web/app/debug.log
+  THEME_HOME: projects/usctdp-bedrock/web/app/themes/usctdp-theme
+  PLUGIN_HOME: projects/usctdp-bedrock/web/app/plugins/usctdp-mgmt
 
 tasks:
   init:
@@ -18,49 +24,40 @@ tasks:
 
   up:
     cmds:
-      - > 
-        docker compose --env-file .env
-        -f sage_dev/compose.yaml 
-        -f sage_dev/compose.{{.MODE}}.yaml 
-        up -d
+      - "{{.DOCKER_COMPOSE}} up -d"
 
   down:
     cmds:
-      - >
-        docker compose  --env-file .env 
-        -f sage_dev/compose.yaml 
-        -f sage_dev/compose.{{.MODE}}.yaml 
-        down
+      - "{{.DOCKER_COMPOSE}} down"
 
   docker-logs:
     cmds:
-      - >
-        docker compose  --env-file .env 
-        -f sage_dev/compose.yaml 
-        -f sage_dev/compose.{{.MODE}}.yaml 
-        logs
+      - "{{.DOCKER_COMPOSE}} logs"
 
   clean:
     cmds:
-      - >
-        docker compose  --env-file .env 
-        -f sage_dev/compose.yaml 
-        -f sage_dev/compose.{{.MODE}}.yaml 
-        down -v
+      - "{{.DOCKER_COMPOSE}} down -v"
       - sudo rm -f projects/usctdp-bedrock/.env
       - sudo rm -rf projects/usctdp-bedrock/vendor
-      - sudo rm -rf projects/usctdp-bedrock/web/app/themes/usctdp-theme/vendor
-      - sudo rm -rf projects/usctdp-bedrock/web/app/themes/usctdp-theme/node_modules
-      - sudo rm -rf projects/usctdp-bedrock/web/app/plugins/usctdp-mgmt/vendor
+      - sudo rm -rf {{.THEME_HOME}}/vendor
+      - sudo rm -rf {{.THEME_HOME}}/node_modules
+      - sudo rm -rf {{.PLUGIN_HOME}}/vendor
+      - sudo rm -rf {{.PLUGIN_HOME}}/node_modules
 
   deploy:
     cmds:
       - >
         python3 sage_dev/sage.py build 
+        --web_container {{.PROJECT_NAME}}_web_1 
         --project usctdp-bedrock --theme usctdp-theme
+      - "{{.DOCKER_COMPOSE}} exec --workdir {{.PLUGIN_HOME}} --user www-data npm install"
+      - "{{.DOCKER_COMPOSE}} exec --workdir {{.PLUGIN_HOME}} --user www-data npm dev"
       - >
         python3 sage_dev/bedrock.py deploy
-        --name usctdp-bedrock --chmod
+        --web_container {{.PROJECT_NAME}}_web_1 
+        --name usctdp-bedrock 
+      - sudo chgrp -R usctdp_devs projects
+      - sudo chmod -R g+rw projects
 
   build-theme:
     cmds:
@@ -73,65 +70,26 @@ tasks:
       - sudo chgrp -R usctdp_devs projects
       - sudo chmod -R g+rw projects
 
-  test-data-init:
-    cmds:
-      - >
-        docker compose --env-file .env 
-        -f sage_dev/compose.yaml 
-        -f sage_dev/compose.{{.MODE}}.yaml 
-        exec 
-        --user www-data 
-        --workdir /www/srv/usctdp-bedrock/web/wp 
-        web sh -c 
-        "wp usctdp import_sessions /www/srv/usctdp-bedrock/test_data/test_session_data.json; 
-        wp usctdp gen_people;
-        wp usctdp gen_registrations 300"
-
-
-  test-data-clean:
-    cmds:
-      - >
-        docker compose --env-file .env 
-        -f sage_dev/compose.yaml 
-        -f sage_dev/compose.{{.MODE}}.yaml 
-        exec 
-        --user www-data 
-        --workdir /www/srv/usctdp-bedrock/web/wp 
-        web 
-        wp usctdp clean all
-
   shell:
     cmds:
       - >
-        docker compose --env-file .env 
-        -f sage_dev/compose.yaml 
-        -f sage_dev/compose.{{.MODE}}.yaml 
-        exec -it --user {{.U | default "www-data"}} {{.S | default "web"}} bash 
+        {{.DOCKER_COMPOSE}}
+        exec -it
+        --user {{.U | default "www-data"}}
+        {{.S | default "web"}} bash
 
   wp:
     cmds:
-      - >
-        docker compose --env-file .env 
-        -f sage_dev/compose.yaml 
-        -f sage_dev/compose.{{.MODE}}.yaml 
-        exec 
-        --user www-data 
-        --workdir /www/srv/usctdp-bedrock/web/wp 
-        web 
-        wp {{.CLI_ARGS}}
+      - "{{.DOCKER_COMPOSE}} exec --user www-data --workdir {{.WP_HOME}} web wp {{.CLI_ARGS}}"
 
   tail-wp-log:
     cmds:
-      - >
-        docker compose --env-file .env 
-        -f sage_dev/compose.yaml 
-        -f sage_dev/compose.{{.MODE}}.yaml 
-        exec --user www-data web tail -n 50 -f /www/srv/usctdp-bedrock/web/app/debug.log
+      - "{{.DOCKER_COMPOSE}} exec --user www-data web tail -n 50 -f {{.WP_LOG}}"
 
   sql:
     cmds:
       - >
-        docker compose --env-file .env 
-        -f sage_dev/compose.yaml 
-        -f sage_dev/compose.{{.MODE}}.yaml 
-        exec -it db sh -c 'mariadb -u root -p"$(cat /run/secrets/db_root_password_dev)"'
+        {{.DOCKER_COMPOSE}}
+        exec -it db sh -c 
+        'mariadb -u root 
+        -p"$(cat /run/secrets/db_root_password_dev)"'
