@@ -2,14 +2,16 @@
 
 version: '3'
 
-vars:
+env:
   MODE: "dev"
+
+vars:
   PROJECT_NAME: "usctdp_{{.MODE}}"
   DOCKER_COMPOSE: "docker compose --env-file .env -p {{.PROJECT_NAME}} -f sage_dev/compose.{{.MODE}}.yaml" 
   WP_HOME: /www/srv/usctdp-bedrock/web/wp
   WP_LOG: /www/srv/usctdp-bedrock/web/app/debug.log
-  THEME_HOME: projects/usctdp-bedrock/web/app/themes/usctdp-theme
-  PLUGIN_HOME: projects/usctdp-bedrock/web/app/plugins/usctdp-mgmt
+  THEME_HOME: /www/srv/usctdp-bedrock/web/app/themes/usctdp-theme
+  PLUGIN_HOME: /www/srv/usctdp-bedrock/web/app/plugins/usctdp-mgmt
 
 tasks:
   init:
@@ -47,14 +49,12 @@ tasks:
   deploy:
     cmds:
       - >
-        python3 sage_dev/sage.py build 
-        --web_container {{.PROJECT_NAME}}_web_1 
+        python3 sage_dev/sage.py --web_container {{.PROJECT_NAME}}-web-1 build
         --project usctdp-bedrock --theme usctdp-theme
-      - "{{.DOCKER_COMPOSE}} exec --workdir {{.PLUGIN_HOME}} --user www-data npm install"
-      - "{{.DOCKER_COMPOSE}} exec --workdir {{.PLUGIN_HOME}} --user www-data npm dev"
+      - "{{.DOCKER_COMPOSE}} exec --workdir {{.PLUGIN_HOME}} web npm install"
+      - "{{.DOCKER_COMPOSE}} exec --workdir {{.PLUGIN_HOME}} web npm run dev"
       - >
-        python3 sage_dev/bedrock.py deploy
-        --web_container {{.PROJECT_NAME}}_web_1 
+        python3 sage_dev/bedrock.py --web_container {{.PROJECT_NAME}}-web-1 deploy 
         --name usctdp-bedrock 
       - sudo chgrp -R usctdp_devs projects
       - sudo chmod -R g+rw projects
