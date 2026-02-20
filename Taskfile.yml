@@ -7,7 +7,7 @@ env:
 
 vars:
   PROJECT_NAME: "usctdp_{{.MODE}}"
-  DOCKER_COMPOSE: "docker compose --env-file .env -p {{.PROJECT_NAME}} -f sage_dev/compose.{{.MODE}}.yaml" 
+  DOCKER_COMPOSE: "docker compose --env-file .env -p {{.PROJECT_NAME}} -f sage_dev/compose.{{.MODE}}.yaml"
   WP_HOME: /www/srv/usctdp-bedrock/web/wp
   WP_LOG: /www/srv/usctdp-bedrock/web/app/debug.log
   THEME_HOME: /www/srv/usctdp-bedrock/web/app/themes/usctdp-theme
@@ -49,20 +49,25 @@ tasks:
   deploy:
     cmds:
       - >
-        python3 sage_dev/sage.py --web_container {{.PROJECT_NAME}}-web-1 build
+        python3 sage_dev/sage.py
+        --web_container {{.PROJECT_NAME}}-web-1
+        build
         --project usctdp-bedrock --theme usctdp-theme
       - "{{.DOCKER_COMPOSE}} exec --workdir {{.PLUGIN_HOME}} web npm install"
       - "{{.DOCKER_COMPOSE}} exec --workdir {{.PLUGIN_HOME}} web npm run dev"
       - >
-        python3 sage_dev/bedrock.py --web_container {{.PROJECT_NAME}}-web-1 deploy 
-        --name usctdp-bedrock 
+        python3 sage_dev/bedrock.py
+        --web_container {{.PROJECT_NAME}}-web-1 deploy
+        --name usctdp-bedrock
       - sudo chgrp -R usctdp_devs projects
       - sudo chmod -R g+rw projects
 
   build-theme:
     cmds:
       - >
-        python3 sage_dev/sage.py build 
+        python3 sage_dev/sage.py
+        --web_container {{.PROJECT_NAME}}-web-1
+        build
         --project usctdp-bedrock --theme usctdp-theme
 
   dev-perms:
@@ -90,6 +95,6 @@ tasks:
     cmds:
       - >
         {{.DOCKER_COMPOSE}}
-        exec -it db sh -c 
-        'mariadb -u root 
+        exec -it db sh -c
+        'mariadb -u root
         -p"$(cat /run/secrets/db_root_password_dev)"'
