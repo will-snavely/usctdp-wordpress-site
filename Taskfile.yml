@@ -10,18 +10,21 @@ vars:
   DOCKER_COMPOSE: "docker compose --env-file .env -p {{.PROJECT_NAME}} -f sage_dev/compose.{{.MODE}}.yaml"
   WP_HOME: /www/srv/usctdp-bedrock/web/wp
   WP_LOG: /www/srv/usctdp-bedrock/web/app/debug.log
+  WP_CLI: "{{.DOCKER_COMPOSE}} exec --user www-data --workdir {{.WP_HOME}} web wp"
   THEME_HOME: /www/srv/usctdp-bedrock/web/app/themes/usctdp-theme
   PLUGIN_HOME: /www/srv/usctdp-bedrock/web/app/plugins/usctdp-mgmt
 
 tasks:
   init:
     cmds:
-      - cat /dev/urandom | tr -dc 'a-zA-Z0-9' | head -c 10 > .secret_db_password_dev
-      - cat /dev/urandom | tr -dc 'a-zA-Z0-9' | head -c 10 > .secret_db_root_password_dev
+      - cat /dev/urandom | tr -dc 'a-zA-Z0-9' | head -c 10 > .secret_db_password_{{.MODE}}
+      - cat /dev/urandom | tr -dc 'a-zA-Z0-9' | head -c 10 > .secret_db_root_password_{{.MODE}}
+      - cat /dev/urandom | tr -dc 'a-zA-Z0-9' | head -c 10 > .secret_admin_password_{{.MODE}}
       - >
-        sed "s|PATH_TO_DB_PASSWORD_FILE|${PWD}/.secret_db_password_dev|" .env.template
-        | sed "s|PATH_TO_DB_ROOT_PASSWORD_FILE|${PWD}/.secret_db_root_password_dev|"
-        | sed "s|PATH_TO_PROJECTS_DIR|${PWD}/projects|" > .env
+        sed "s|PATH_TO_DB_PASSWORD_FILE|${PWD}/.secret_db_password_{{.MODE}}|" .env.template
+        | sed "s|PATH_TO_DB_ROOT_PASSWORD_FILE|${PWD}/.secret_db_root_password_{{.MODE}}|"
+        | sed "s|PATH_TO_PROJECTS_DIR|${PWD}/projects|" 
+        | sed "s|PATH_TO_ADMIN_PASSWORD_FILE|${PWD}/.secret_admin_password_{{.MODE}}|" > .env
       - python3 config.py .env
 
   up:
@@ -61,6 +64,11 @@ tasks:
         --name usctdp-bedrock
       - sudo chgrp -R usctdp_devs projects
       - sudo chmod -R g+rw projects
+      - "{{.DOCKER_COMPOSE}} exec --user www-data --workdir {{.WP_HOME}} web bash /app/scripts/web/install_wordpress.sh"
+      - "{{.WP_CLI}} plugin activate woocommerce"
+      - "{{.WP_CLI}} plugin activate usctdp-mgmt"
+      - "{{.WP_CLI}} plugin activate user-switching"
+      - "{{.WP_CLI}} theme activate usctdp-theme"
 
   build-theme:
     cmds:
@@ -85,7 +93,7 @@ tasks:
 
   wp:
     cmds:
-      - "{{.DOCKER_COMPOSE}} exec --user www-data --workdir {{.WP_HOME}} web wp {{.CLI_ARGS}}"
+      - "{{.WP_CLI}} {{.CLI_ARGS}}"
 
   tail-wp-log:
     cmds:
