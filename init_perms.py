@@ -38,6 +38,8 @@ def init(config):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('env_file', type=str, help='Path to the .env file') 
+    parser.add_argument('mode', type=str, help='The current mode') 
     args = parser.parse_args()
     config = EnvConfig.from_env_file(args.env_file)
-    init(config)
+    if(args.mode == "dev"):
+        init(config)
