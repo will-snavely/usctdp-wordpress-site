@@ -31,7 +31,7 @@ jobs:
         with:
           context: .
           push: true
-          tags: ${{ secrets.DOCKERHUB_USERNAME }}/usctdp_bedrock:latest
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/usctdp-bedrock:latest
           build-args: |
             PROJECT=usctdp-bedrock
             THEME=usctdp-theme
