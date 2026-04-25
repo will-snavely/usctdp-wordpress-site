@@ -33,5 +33,5 @@ jobs:
           push: true
           tags: ${{ secrets.DOCKERHUB_USERNAME }}/usctdp_bedrock:latest
           build-args: |
-            PROJECT=usctdp_bedrock
-            THEME=usctdp_theme
+            PROJECT=usctdp-bedrock
+            THEME=usctdp-theme
