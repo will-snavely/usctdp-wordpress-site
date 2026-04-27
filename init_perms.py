@@ -2,22 +2,7 @@ import subprocess
 import argparse
 import getpass
 from collections import OrderedDict
-
-class EnvConfig:
-    def __init__(self):
-        self.env_vars = {}
-
-    @classmethod
-    def from_env_file(cls, path):
-        with open(path, 'r') as f:
-            lines = [line.strip() for line in f.readlines()]
-            lines = [line for line in lines if line and not line.startswith('#')]
-        result = cls()
-        result.env_vars = dict([line.split('=', 1) for line in lines])
-        return result
-
-    def get(self, key):
-        return self.env_vars.get(key)
+from usctdp_env import Usctdp_Config
 
 
 def init(config):
@@ -40,6 +25,6 @@ if __name__ == '__main__':
     parser.add_argument('env_file', type=str, help='Path to the .env file') 
     parser.add_argument('mode', type=str, help='The current mode') 
     args = parser.parse_args()
-    config = EnvConfig.from_env_file(args.env_file)
+    config = Usctdp_Config.from_env_file(args.env_file)
     if(args.mode == "dev"):
         init(config)

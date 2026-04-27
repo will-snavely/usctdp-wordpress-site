@@ -3,7 +3,7 @@
 version: '3'
 
 vars:
-  MODE: '{{.MODE | default "dev"}}'
+  MODE: '{{.MODE | default "prod"}}'
   PROJECT_NAME: "usctdp_{{.MODE}}"
   DOCKER_COMPOSE: "docker compose --env-file .env.{{.MODE}} -p {{.PROJECT_NAME}} -f sage_dev/compose.{{.MODE}}.yaml"
   WP_HOME: /www/srv/usctdp-bedrock/web/wp
@@ -25,6 +25,11 @@ tasks:
     cmds:
       - "{{.DOCKER_COMPOSE}} up -d"
 
+  up-cert-init:
+    cmds:
+      - python3 gen_nginx_config.py .env.{{.MODE}}.template sage_dev/nginx/prod.conf.init sage_dev/nginx/prod.conf 
+      - "{{.DOCKER_COMPOSE}} up -d proxy web db"
+
   down:
     cmds:
       - "{{.DOCKER_COMPOSE}} down"
@@ -43,9 +48,8 @@ tasks:
       - sudo rm -rf {{.PLUGIN_HOME}}/vendor
       - sudo rm -rf {{.PLUGIN_HOME}}/node_modules
 
-  up-cert:
+  get-cert:
     cmds:
-      - "{{.DOCKER_COMPOSE}} up -d proxy web db"
       - >
         {{.DOCKER_COMPOSE}} run --rm certbot certonly --webroot
         --webroot-path=/var/www/html
@@ -54,7 +58,7 @@ tasks:
         --no-eff-email
         -d usctdp.duckdns.org -d www.usctdp.duckdns.org
 
-  deploy:
+  deploy-dev:
     cmds:
       - >
         python3 sage_dev/sage.py
@@ -69,6 +73,21 @@ tasks:
         --name usctdp-bedrock
       - sudo chgrp -R usctdp_devs projects
       - sudo chmod -R g+rw projects
+      - "{{.DOCKER_COMPOSE}} exec --user www-data --workdir {{.WP_HOME}} web bash /app/scripts/web/install_wordpress.sh"
+      - "{{.WP_CLI}} plugin activate woocommerce"
+      - "{{.WP_CLI}} plugin activate usctdp-mgmt"
+      - "{{.WP_CLI}} plugin activate user-switching"
+      - "{{.WP_CLI}} theme activate usctdp-theme"
+
+  deploy-prod:
+    cmds:
+      - >
+        python3 sage_dev/sage.py
+        --web_container {{.PROJECT_NAME}}-web-1
+        build
+        --project usctdp-bedrock --theme usctdp-theme
+      - "{{.DOCKER_COMPOSE}} exec --workdir {{.PLUGIN_HOME}} web npm install"
+      - "{{.DOCKER_COMPOSE}} exec --workdir {{.PLUGIN_HOME}} web npm run dev"
       - "{{.DOCKER_COMPOSE}} exec --user www-data --workdir {{.WP_HOME}} web bash /app/scripts/web/install_wordpress.sh"
       - "{{.WP_CLI}} plugin activate woocommerce"
       - "{{.WP_CLI}} plugin activate usctdp-mgmt"
