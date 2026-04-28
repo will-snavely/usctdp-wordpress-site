@@ -4,7 +4,7 @@ version: '3'
 
 includes:
   common:
-    taskfile: ./Taskfile.common.yaml
+    taskfile: ./Taskfile.common.yml
     vars: { MODE: dev }
 
 tasks:
