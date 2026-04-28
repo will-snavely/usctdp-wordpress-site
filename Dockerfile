@@ -28,9 +28,11 @@ RUN composer install --no-interaction --no-scripts --no-ansi --optimize-autoload
 WORKDIR $THEME_ROOT
 RUN composer install --no-interaction --no-scripts --no-ansi --optimize-autoloader --no-dev
 
-RUN mkdir -p web/app/uploads web/app/cache && \
-    chown -R www-data:www-data web/app/uploads web/app/cache /var/run/apache2 /var/log/apache2 /var/lock/apache2
-RUN chmod -R 755 web/app/uploads web/app/cache
+RUN mkdir -p web/app/uploads \
+             web/app/cache/acorn/framework/cache \
+             web/app/cache/acorn/framework/views && \
+    chown -R www-data:www-data web/app/uploads web/app/cache /var/run/apache2 /var/log/apache2 /var/lock/apache2 && \
+    chmod -R 775 web/app/uploads web/app/cache
 
 USER www-data
 ENTRYPOINT ["apache2ctl", "-D", "FOREGROUND"]
