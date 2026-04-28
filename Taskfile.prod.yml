@@ -32,6 +32,10 @@ tasks:
     cmds:
       - "{{.DOCKER_COMPOSE}} up -d"
 
+  config-bedrock:
+    cmds:
+      - "{{.DOCKER_COMPOSE}} exec -u root web sh /app/scripts/web/config_bedrock.sh"
+
   config-apache:
     cmds:
       - "{{.DOCKER_COMPOSE}} exec -u root web sh /app/scripts/web/config_apache.sh"
