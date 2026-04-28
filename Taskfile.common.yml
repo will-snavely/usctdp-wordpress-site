@@ -15,7 +15,6 @@ tasks:
     cmds:
       - "{{.DOCKER_COMPOSE}} pull"
 
-
   docker-logs:
     cmds:
       - "{{.DOCKER_COMPOSE}} logs"

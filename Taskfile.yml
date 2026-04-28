@@ -2,11 +2,6 @@
 
 version: '3'
 
-includes:
-  common:
-    taskfile: ./Taskfile.common.yml
-    vars: { MODE: dev }
-
 tasks:
   init:
     cmds:
@@ -19,11 +14,6 @@ tasks:
   up:
     cmds:
       - "{{.DOCKER_COMPOSE}} up -d"
-
-  up-cert-init:
-    cmds:
-      - python3 gen_nginx_config.py .env.{{.MODE}}.template sage_dev/nginx/prod.conf.init sage_dev/nginx/prod.conf 
-      - "{{.DOCKER_COMPOSE}} up -d proxy web db"
 
   down:
     cmds:
