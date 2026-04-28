@@ -23,16 +23,15 @@ WORKDIR /www/srv/$PROJECT
 COPY --chown=root:root projects/$PROJECT ./
 COPY --from=node-builder --chown=root:root /build/$PROJECT/web/app/themes/$THEME/public ./web/app/themes/$THEME/public
 COPY --from=node-builder --chown=root:root /build/$PROJECT/web/app/plugins/usctdp-mgmt/dist ./web/app/plugins/usctdp-mgmt/dist 
-RUN composer install --no-interaction --no-scripts --no-ansi --optimize-autoloader --no-dev
-
-WORKDIR $THEME_ROOT
-RUN composer install --no-interaction --no-scripts --no-ansi --optimize-autoloader --no-dev
-
 RUN mkdir -p web/app/uploads \
              web/app/cache/acorn/framework/cache \
              web/app/cache/acorn/framework/views && \
     chown -R www-data:www-data web/app/uploads web/app/cache /var/run/apache2 /var/log/apache2 /var/lock/apache2 && \
-    chmod -R 775 web/app/uploads web/app/cache
+    chmod -R 775 web/app/uploads web/app/cache && \
+    composer install --no-interaction --no-scripts --no-ansi --optimize-autoloader --no-dev
+
+WORKDIR $THEME_ROOT
+RUN composer install --no-interaction --no-scripts --no-ansi --optimize-autoloader --no-dev
 
 USER www-data
 ENTRYPOINT ["apache2ctl", "-D", "FOREGROUND"]
