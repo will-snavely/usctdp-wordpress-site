@@ -3,7 +3,7 @@ import argparse
 import getpass
 from collections import OrderedDict
 from pathlib import Path
-from usctdp_env import Usctdp_Config
+from usctdp_env import UsctdpConfig
 
 def apply_dev_config(env):
     current_dir = Path.cwd()
@@ -23,7 +23,7 @@ if __name__ == '__main__':
     parser.add_argument('template', type=str, help='Path to the .env template file')
     parser.add_argument('mode', type=str, help='The current mode (dev/prod)')
     args = parser.parse_args()
-    config = EnvConfig.from_env_file(args.template)
+    config = UsctdpConfig.from_env_file(args.template)
     if args.mode == "dev":
         apply_dev_config(config)
         with open(".env.dev", "w") as f:

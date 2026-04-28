@@ -2,7 +2,7 @@ import subprocess
 import argparse
 import getpass
 from collections import OrderedDict
-from usctdp_env import Usctdp_Config
+from usctdp_env import UsctdpConfig
 
 
 def init(config):
@@ -25,6 +25,6 @@ if __name__ == '__main__':
     parser.add_argument('env_file', type=str, help='Path to the .env file') 
     parser.add_argument('mode', type=str, help='The current mode') 
     args = parser.parse_args()
-    config = Usctdp_Config.from_env_file(args.env_file)
+    config = UsctdpConfig.from_env_file(args.env_file)
     if(args.mode == "dev"):
         init(config)

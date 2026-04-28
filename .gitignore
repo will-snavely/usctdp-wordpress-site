@@ -1,6 +1,7 @@
 .env.dev
 .env.prod
 .secret*
+__pycache__/
 
 # Playwright
 node_modules/
@@ -9,3 +10,4 @@ node_modules/
 /blob-report/
 /playwright/.cache/
 /playwright/.auth/
+

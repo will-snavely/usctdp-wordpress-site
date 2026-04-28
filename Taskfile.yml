@@ -2,14 +2,31 @@
 
 version: '3'
 
+vars:
+  DOCKER_COMPOSE: "docker compose --env-file .env.dev -p usctdp_dev -f sage_dev/compose.dev.yaml"
+  WP_HOME: /www/srv/usctdp-bedrock/web/wp
+  WP_LOG: /www/srv/usctdp-bedrock/web/app/debug.log
+  WP_CLI: "{{.DOCKER_COMPOSE}} exec --user www-data --workdir /www/srv/usctdp-bedrock/web/wp web wp"
+  THEME_HOME: /www/srv/usctdp-bedrock/web/app/themes/usctdp-theme
+  PLUGIN_HOME: /www/srv/usctdp-bedrock/web/app/plugins/usctdp-mgmt
+
+includes:
+  common:
+    taskfile: ./Taskfile.common.yml
+    vars: { 
+      MODE: dev,
+      DOCKER_COMPOSE: "{{.DOCKER_COMPOSE}}"
+    }
+    flatten: true
+
 tasks:
   init:
     cmds:
-      - cat /dev/urandom | tr -dc 'a-zA-Z0-9' | head -c 10 > .secret_db_password_{{.MODE}}
-      - cat /dev/urandom | tr -dc 'a-zA-Z0-9' | head -c 10 > .secret_db_root_password_{{.MODE}}
-      - cat /dev/urandom | tr -dc 'a-zA-Z0-9' | head -c 10 > .secret_admin_password_{{.MODE}}
-      - python3 gen_config.py .env.{{.MODE}}.template {{.MODE}}
-      - python3 init_dev_perms.py .env.{{.MODE}} {{.MODE}}
+      - cat /dev/urandom | tr -dc 'a-zA-Z0-9' | head -c 10 > .secret_db_password_dev
+      - cat /dev/urandom | tr -dc 'a-zA-Z0-9' | head -c 10 > .secret_db_root_password_dev
+      - cat /dev/urandom | tr -dc 'a-zA-Z0-9' | head -c 10 > .secret_admin_password_dev
+      - python3 gen_config.py .env.dev.template dev
+      - python3 init_dev_perms.py .env.dev dev
 
   up:
     cmds:
@@ -33,14 +50,14 @@ tasks:
     cmds:
       - >
         python3 sage_dev/sage.py
-        --web_container {{.PROJECT_NAME}}-web-1
+        --web_container usctdp_dev-web-1
         build
         --project usctdp-bedrock --theme usctdp-theme
       - "{{.DOCKER_COMPOSE}} exec --workdir {{.PLUGIN_HOME}} web npm install"
       - "{{.DOCKER_COMPOSE}} exec --workdir {{.PLUGIN_HOME}} web npm run dev"
       - >
         python3 sage_dev/bedrock.py
-        --web_container {{.PROJECT_NAME}}-web-1 deploy
+        --web_container usctdp_dev-web-1 deploy
         --name usctdp-bedrock
       - sudo chgrp -R usctdp_devs projects
       - sudo chmod -R g+rw projects
@@ -54,7 +71,7 @@ tasks:
     cmds:
       - >
         python3 sage_dev/sage.py
-        --web_container {{.PROJECT_NAME}}-web-1
+        --web_container usctdp_dev-web-1
         build
         --project usctdp-bedrock --theme usctdp-theme
 
