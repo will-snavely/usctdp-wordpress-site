@@ -17,7 +17,7 @@ tasks:
         {{.DOCKER_COMPOSE}}
         exec -it
         --user {{.U | default "www-data"}}
-        {{.S | default "web"}} bash
+        {{.S | default "web"}} {{.SH | default "bash"}}
 
   wp:
     cmds:
