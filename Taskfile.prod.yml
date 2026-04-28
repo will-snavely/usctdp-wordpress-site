@@ -30,6 +30,7 @@ tasks:
 
   up:
     cmds:
+      - python3 gen_nginx_config.py .env.prod sage_dev/nginx/prod.conf.main sage_dev/nginx/prod.conf 
       - "{{.DOCKER_COMPOSE}} up -d"
 
   config-bedrock:
@@ -42,7 +43,7 @@ tasks:
 
   up-cert-init:
     cmds:
-      - python3 gen_nginx_config.py .env.{{.MODE}}.template sage_dev/nginx/prod.conf.init sage_dev/nginx/prod.conf 
+      - python3 gen_nginx_config.py .env.prod sage_dev/nginx/prod.conf.init sage_dev/nginx/prod.conf 
       - "{{.DOCKER_COMPOSE}} up -d proxy web db"
 
   down:

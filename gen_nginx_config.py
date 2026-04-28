@@ -16,10 +16,10 @@ if __name__ == '__main__':
 
     with open(args.template, 'r') as file:
         content = file.read()
-    
-    updated_content = content.replace('WEB_HOSTNAME', config.get("WEB_HOSTNAME"))
-    updated_content = content.replace('PROXY_PORT_HTTP', config.get('PROXY_PORT_HTTP'))
-    updated_content = content.replace('PROXY_PORT_HTTPS', config.get('PROXY_PORT_HTTPS'))
+    updated_content = content
+    updated_content = updated_content.replace('WEB_HOSTNAME', config.get("WEB_HOSTNAME"))
+    updated_content = updated_content.replace('PROXY_PORT_HTTP', config.get('PROXY_PORT_HTTP'))
+    updated_content = updated_content.replace('PROXY_PORT_HTTPS', config.get('PROXY_PORT_HTTPS'))
 
     with open(args.out, 'w') as file:
         file.write(updated_content)
