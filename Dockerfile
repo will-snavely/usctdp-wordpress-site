@@ -2,7 +2,7 @@
 FROM node:18-alpine AS node-builder
 ARG PROJECT
 ARG THEME
-COPY --chown=root:root projects/$PROJECT /build/
+COPY --chown=root:root projects/$PROJECT /build/$PROJECT/
 WORKDIR /build/$PROJECT/web/app/themes/$THEME
 RUN npm install && npm run build
 WORKDIR /build/$PROJECT/web/app/plugins/usctdp-mgmt
