@@ -2,14 +2,6 @@
 
 version: '3'
 
-vars:
-  DOCKER_COMPOSE: "docker compose --env-file .env.{{.MODE}} -p usctdp_{{.MODE}} -f sage_dev/compose.{{.MODE}}.yaml"
-  WP_HOME: /www/srv/usctdp-bedrock/web/wp
-  WP_LOG: /www/srv/usctdp-bedrock/web/app/debug.log
-  WP_CLI: "{{.DOCKER_COMPOSE}} exec --user www-data --workdir /www/srv/usctdp-bedrock/web/wp web wp"
-  THEME_HOME: /www/srv/usctdp-bedrock/web/app/themes/usctdp-theme
-  PLUGIN_HOME: /www/srv/usctdp-bedrock/web/app/plugins/usctdp-mgmt
-
 tasks:
   pull:
     cmds:

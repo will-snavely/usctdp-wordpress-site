@@ -32,6 +32,10 @@ tasks:
     cmds:
       - "{{.DOCKER_COMPOSE}} up -d"
 
+  config-apache:
+    cmds:
+      - "{{.DOCKER_COMPOSE}} exec -u root web sh /app/scripts/web/config_apache.sh"
+
   up-cert-init:
     cmds:
       - python3 gen_nginx_config.py .env.{{.MODE}}.template sage_dev/nginx/prod.conf.init sage_dev/nginx/prod.conf 
