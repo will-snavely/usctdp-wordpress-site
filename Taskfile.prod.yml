@@ -10,6 +10,16 @@ vars:
   THEME_HOME: /www/srv/usctdp-bedrock/web/app/themes/usctdp-theme
   PLUGIN_HOME: /www/srv/usctdp-bedrock/web/app/plugins/usctdp-mgmt
 
+includes:
+  common:
+    taskfile: ./Taskfile.common.yml
+    vars: { 
+      MODE: prod,
+      DOCKER_COMPOSE: "{{.DOCKER_COMPOSE}}"
+    }
+    flatten: true
+
+
 tasks:
   init:
     cmds:
@@ -48,7 +58,3 @@ tasks:
       - "{{.WP_CLI}} plugin activate usctdp-mgmt"
       - "{{.WP_CLI}} plugin activate user-switching"
       - "{{.WP_CLI}} theme activate usctdp-theme"
-
-  docker-logs:
-    cmds:
-      - "{{.DOCKER_COMPOSE}} logs"
