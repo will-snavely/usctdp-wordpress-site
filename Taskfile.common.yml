@@ -1,0 +1,40 @@
+# https://taskfile.dev
+
+version: '3'
+
+vars:
+  DOCKER_COMPOSE: "docker compose --env-file .env.{{.MODE}} -p {{.PROJECT_NAME}} -f sage_dev/compose.{{.MODE}}.yaml"
+  WP_HOME: /www/srv/usctdp-bedrock/web/wp
+  WP_LOG: /www/srv/usctdp-bedrock/web/app/debug.log
+  WP_CLI: "{{.DOCKER_COMPOSE}} exec --user www-data --workdir {{.WP_HOME}} web wp"
+  THEME_HOME: /www/srv/usctdp-bedrock/web/app/themes/usctdp-theme
+  PLUGIN_HOME: /www/srv/usctdp-bedrock/web/app/plugins/usctdp-mgmt
+
+tasks:
+  docker-logs:
+    cmds:
+      - "{{.DOCKER_COMPOSE}} logs"
+
+  shell:
+    cmds:
+      - >
+        {{.DOCKER_COMPOSE}}
+        exec -it
+        --user {{.U | default "www-data"}}
+        {{.S | default "web"}} bash
+
+  wp:
+    cmds:
+      - "{{.WP_CLI}} {{.CLI_ARGS}}"
+
+  tail-wp-log:
+    cmds:
+      - "{{.DOCKER_COMPOSE}} exec --user www-data web tail -n 50 -f {{.WP_LOG}}"
+
+  sql:
+    cmds:
+      - >
+        {{.DOCKER_COMPOSE}}
+        exec -it db sh -c
+        'mariadb -u root
+        -p"$(cat /run/secrets/db_root_password_dev)"'

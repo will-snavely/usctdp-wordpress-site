@@ -1,0 +1,140 @@
+# https://taskfile.dev
+
+version: '3'
+
+vars:
+  MODE: '{{.MODE | default "prod"}}'
+  PROJECT_NAME: "usctdp_{{.MODE}}"
+  DOCKER_COMPOSE: "docker compose --env-file .env.{{.MODE}} -p {{.PROJECT_NAME}} -f sage_dev/compose.{{.MODE}}.yaml"
+  WP_HOME: /www/srv/usctdp-bedrock/web/wp
+  WP_LOG: /www/srv/usctdp-bedrock/web/app/debug.log
+  WP_CLI: "{{.DOCKER_COMPOSE}} exec --user www-data --workdir {{.WP_HOME}} web wp"
+  THEME_HOME: /www/srv/usctdp-bedrock/web/app/themes/usctdp-theme
+  PLUGIN_HOME: /www/srv/usctdp-bedrock/web/app/plugins/usctdp-mgmt
+
+tasks:
+  init:
+    cmds:
+      - cat /dev/urandom | tr -dc 'a-zA-Z0-9' | head -c 10 > .secret_db_password_{{.MODE}}
+      - cat /dev/urandom | tr -dc 'a-zA-Z0-9' | head -c 10 > .secret_db_root_password_{{.MODE}}
+      - cat /dev/urandom | tr -dc 'a-zA-Z0-9' | head -c 10 > .secret_admin_password_{{.MODE}}
+      - python3 gen_config.py .env.{{.MODE}}.template {{.MODE}}
+      - python3 init_perms.py .env.{{.MODE}} {{.MODE}}
+
+  up:
+    cmds:
+      - "{{.DOCKER_COMPOSE}} up -d"
+
+  up-cert-init:
+    cmds:
+      - python3 gen_nginx_config.py .env.{{.MODE}}.template sage_dev/nginx/prod.conf.init sage_dev/nginx/prod.conf 
+      - "{{.DOCKER_COMPOSE}} up -d proxy web db"
+
+  down:
+    cmds:
+      - "{{.DOCKER_COMPOSE}} down"
+
+  docker-logs:
+    cmds:
+      - "{{.DOCKER_COMPOSE}} logs"
+
+  clean:
+    cmds:
+      - "{{.DOCKER_COMPOSE}} down -v"
+      - sudo rm -f projects/usctdp-bedrock/.env
+      - sudo rm -rf projects/usctdp-bedrock/vendor
+      - sudo rm -rf {{.THEME_HOME}}/vendor
+      - sudo rm -rf {{.THEME_HOME}}/node_modules
+      - sudo rm -rf {{.PLUGIN_HOME}}/vendor
+      - sudo rm -rf {{.PLUGIN_HOME}}/node_modules
+
+  get-cert:
+    cmds:
+      - >
+        {{.DOCKER_COMPOSE}} run --rm certbot certonly --webroot
+        --webroot-path=/var/www/html
+        --email will.snavely@gmail.com
+        --agree-tos
+        --no-eff-email
+        -d usctdp.duckdns.org -d www.usctdp.duckdns.org
+
+  deploy-dev:
+    cmds:
+      - >
+        python3 sage_dev/sage.py
+        --web_container {{.PROJECT_NAME}}-web-1
+        build
+        --project usctdp-bedrock --theme usctdp-theme
+      - "{{.DOCKER_COMPOSE}} exec --workdir {{.PLUGIN_HOME}} web npm install"
+      - "{{.DOCKER_COMPOSE}} exec --workdir {{.PLUGIN_HOME}} web npm run dev"
+      - >
+        python3 sage_dev/bedrock.py
+        --web_container {{.PROJECT_NAME}}-web-1 deploy
+        --name usctdp-bedrock
+      - sudo chgrp -R usctdp_devs projects
+      - sudo chmod -R g+rw projects
+      - "{{.DOCKER_COMPOSE}} exec --user www-data --workdir {{.WP_HOME}} web bash /app/scripts/web/install_wordpress.sh"
+      - "{{.WP_CLI}} plugin activate woocommerce"
+      - "{{.WP_CLI}} plugin activate usctdp-mgmt"
+      - "{{.WP_CLI}} plugin activate user-switching"
+      - "{{.WP_CLI}} theme activate usctdp-theme"
+
+  deploy-prod:
+    cmds:
+      - >
+        python3 sage_dev/sage.py
+        --web_container {{.PROJECT_NAME}}-web-1
+        build
+        --project usctdp-bedrock --theme usctdp-theme
+      - "{{.DOCKER_COMPOSE}} exec --workdir {{.PLUGIN_HOME}} web npm install"
+      - "{{.DOCKER_COMPOSE}} exec --workdir {{.PLUGIN_HOME}} web npm run dev"
+      - "{{.DOCKER_COMPOSE}} exec --user www-data --workdir {{.WP_HOME}} web bash /app/scripts/web/install_wordpress.sh"
+      - "{{.WP_CLI}} plugin activate woocommerce"
+      - "{{.WP_CLI}} plugin activate usctdp-mgmt"
+      - "{{.WP_CLI}} plugin activate user-switching"
+      - "{{.WP_CLI}} theme activate usctdp-theme"
+
+  build-theme:
+    cmds:
+      - >
+        python3 sage_dev/sage.py
+        --web_container {{.PROJECT_NAME}}-web-1
+        build
+        --project usctdp-bedrock --theme usctdp-theme
+
+  build:
+    cmds:
+      - sudo rm -rf sage_dev/build
+      - mkdir -p sage_dev/build
+      - cp -R projects sage_dev/build
+      - cp sage_dev/images/Dockerfile.web.prod sage_dev/build
+      - "{{.DOCKER_COMPOSE}} build"
+
+  dev-perms:
+    cmds:
+      - sudo chgrp -R usctdp_devs projects
+      - sudo chmod -R g+rw projects
+
+  shell:
+    cmds:
+      - >
+        {{.DOCKER_COMPOSE}}
+        exec -it
+        --user {{.U | default "www-data"}}
+        {{.S | default "web"}} bash
+
+  wp:
+    cmds:
+      - "{{.WP_CLI}} {{.CLI_ARGS}}"
+
+  tail-wp-log:
+    cmds:
+      - "{{.DOCKER_COMPOSE}} exec --user www-data web tail -n 50 -f {{.WP_LOG}}"
+
+  sql:
+    cmds:
+      - >
+        {{.DOCKER_COMPOSE}}
+        exec -it db sh -c
+        'mariadb -u root
+        -p"$(cat /run/secrets/db_root_password_dev)"'

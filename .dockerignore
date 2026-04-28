@@ -1,0 +1,48 @@
+# --- Version Control ---
+.git
+.gitignore
+.gitattributes
+
+# --- OS / IDE Files ---
+.DS_Store
+Thumbs.db
+.vscode
+.idea
+*.swp
+
+# --- Local Environment ---
+.env
+.env.example
+.docker
+docker-compose.yml
+docker-compose.*.yml
+
+# --- Node.js (Very Important) ---
+# We want to ignore local node_modules so the builder 
+# installs them fresh for the alpine environment.
+node_modules
+npm-debug.log
+yarn-error.log
+
+# --- Composer ---
+# While you need composer.json/lock, you usually want to 
+# ignore the local vendor folder to ensure a clean build.
+vendor
+
+# --- WordPress / Bedrock Specifics ---
+web/app/uploads/*
+web/app/cache/*
+web/app/upgrade
+web/wp-config.php
+
+# --- Sage 11 Specifics ---
+# Ignore the compiled assets if they exist locally; 
+# the Dockerfile will build these from scratch.
+web/app/themes/*/public
+web/app/themes/*/node_modules
+web/app/themes/*/vendor
+
+# --- Build Artifacts ---
+dist
+build
+*.log
