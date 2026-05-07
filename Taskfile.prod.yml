@@ -23,10 +23,10 @@ includes:
 tasks:
   init:
     cmds:
-      - cat /dev/urandom | tr -dc 'a-zA-Z0-9' | head -c 10 > .secret_db_password_{{.MODE}}
-      - cat /dev/urandom | tr -dc 'a-zA-Z0-9' | head -c 10 > .secret_db_root_password_{{.MODE}}
-      - cat /dev/urandom | tr -dc 'a-zA-Z0-9' | head -c 10 > .secret_admin_password_{{.MODE}}
-      - python3 gen_config.py .env.{{.MODE}}.template {{.MODE}}
+      - cat /dev/urandom | tr -dc 'a-zA-Z0-9' | head -c 10 > .secret_db_password_prod
+      - cat /dev/urandom | tr -dc 'a-zA-Z0-9' | head -c 10 > .secret_db_root_password_prod
+      - cat /dev/urandom | tr -dc 'a-zA-Z0-9' | head -c 10 > .secret_admin_password_prod
+      - python3 gen_config.py .env.prod.template prod
 
   up:
     cmds:
@@ -63,7 +63,7 @@ tasks:
   get-cert:
     cmds:
       - >
-        {{.common.DOCKER_COMPOSE}} run --rm certbot certonly --webroot
+        {{.DOCKER_COMPOSE}} run --rm --entrypoint "certbot" certbot certonly --webroot
         --webroot-path=/var/www/html
         --email will.snavely@gmail.com
         --agree-tos
