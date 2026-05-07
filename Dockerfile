@@ -26,8 +26,8 @@ COPY --from=node-builder --chown=root:root /build/$PROJECT/web/app/plugins/usctd
 RUN mkdir -p web/app/uploads \
              web/app/cache/acorn/framework/cache \
              web/app/cache/acorn/framework/views && \
-    cat "" > /www/srv/usctdp-bedrock/web/app/debug.log && \
-    chown www-data:www-data  /www/srv/usctdp-bedrock/web/app/debug.log && \
+    touch /www/srv/usctdp-bedrock/web/app/debug.log && \
+    chown www-data:www-data /www/srv/usctdp-bedrock/web/app/debug.log && \
     chown -R www-data:www-data web/app/uploads web/app/cache /var/run/apache2 /var/log/apache2 /var/lock/apache2 && \
     chmod -R 775 web/app/uploads web/app/cache && \
     chmod 664 /www/srv/usctdp-bedrock/web/app/debug.log && \
