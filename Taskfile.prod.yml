@@ -49,8 +49,6 @@ tasks:
       - "{{.WP_CLI}} plugin activate user-switching"
       - "{{.WP_CLI}} theme activate usctdp-theme"
 
-
-
   up-cert-init:
     cmds:
       - python3 gen_nginx_config.py .env.prod sage_dev/nginx/prod.conf.init sage_dev/nginx/prod.conf 
