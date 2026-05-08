@@ -41,14 +41,6 @@ tasks:
     cmds:
       - "{{.DOCKER_COMPOSE}} exec -u root web sh /app/scripts/web/config_apache.sh"
 
-  install-wordpress:
-    cmds:
-      - "{{.DOCKER_COMPOSE}} exec --user www-data --workdir {{.WP_HOME}} web bash /app/scripts/web/install_wordpress.sh"
-      - "{{.WP_CLI}} plugin activate woocommerce"
-      - "{{.WP_CLI}} plugin activate usctdp-mgmt"
-      - "{{.WP_CLI}} plugin activate user-switching"
-      - "{{.WP_CLI}} theme activate usctdp-theme"
-
   up-cert-init:
     cmds:
       - python3 gen_nginx_config.py .env.prod sage_dev/nginx/prod.conf.init sage_dev/nginx/prod.conf 
@@ -57,6 +49,11 @@ tasks:
   down:
     cmds:
       - "{{.DOCKER_COMPOSE}} down"
+
+  extra-config:
+    cmds:
+      - "{{.DOCKER_COMPOSE}} cp .env.extra web:/www/srv/usctdp-bedrock/.env.extra"
+
 
   get-cert:
     cmds:
@@ -70,6 +67,10 @@ tasks:
 
   deploy:
     cmds:
+      - touch .env.extra
+      - "{{.DOCKER_COMPOSE}} cp .env.extra web:/www/srv/usctdp-bedrock/.env.extra"
+      - "{{.DOCKER_COMPOSE}} exec -u root web sh /app/scripts/web/config_bedrock.sh"
+      - "{{.DOCKER_COMPOSE}} exec -u root web sh /app/scripts/web/config_apache.sh"
       - "{{.DOCKER_COMPOSE}} exec --user www-data --workdir {{.WP_HOME}} web bash /app/scripts/web/install_wordpress.sh"
       - "{{.WP_CLI}} plugin activate woocommerce"
       - "{{.WP_CLI}} plugin activate usctdp-mgmt"
