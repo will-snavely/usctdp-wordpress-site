@@ -1,0 +1,15 @@
+students/
+waitlist/
+clinics/1/1
+families/
+family/
+purchases/
+purchase/
+registrations/
+registration/
+activities/
+activity/
+sessions/
+session/
+products/
+ledger/

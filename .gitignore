@@ -4,6 +4,7 @@
 .env.extra
 .secret*
 __pycache__/
+security/ffuf/results/
 
 # Playwright
 node_modules/
