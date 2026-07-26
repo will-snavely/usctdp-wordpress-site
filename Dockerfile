@@ -10,7 +10,7 @@
 # if it's declared ahead of every stage, otherwise it's scoped to whichever
 # stage it textually falls inside and is invisible to later stages' FROM
 # lines (silently resolves to empty, producing an invalid image reference).
-ARG BEDROCK_TAG=518a0ce450e7ab8c9a7c36b442281292eadb6123-29
+ARG BEDROCK_TAG=69cff594f79232e9089d46d2083128cd2225a91b-30
 
 # --- Stage 1: Build Assets ---
 FROM node:18-alpine AS node-builder
