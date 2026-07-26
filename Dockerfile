@@ -1,3 +1,17 @@
+# Pinned to a specific hcdwp build (commit-sha-run_number, per
+# hcdwp/.github/workflows/build-and-push.yml) rather than :latest, so builds
+# here are reproducible and a bad/different bedrock rebuild can't silently
+# change what gets deployed. Bump deliberately: check
+# https://hub.docker.com/r/horsecatdog/bedrock/tags for the tag to move to,
+# or override with --build-arg BEDROCK_TAG=... for a one-off build.
+#
+# Must be declared before the FIRST FROM in the file (not just before the
+# FROM that uses it) - an ARG used inside a FROM only has "global" scope
+# if it's declared ahead of every stage, otherwise it's scoped to whichever
+# stage it textually falls inside and is invisible to later stages' FROM
+# lines (silently resolves to empty, producing an invalid image reference).
+ARG BEDROCK_TAG=518a0ce450e7ab8c9a7c36b442281292eadb6123-29
+
 # --- Stage 1: Build Assets ---
 FROM node:18-alpine AS node-builder
 ARG PROJECT
@@ -9,13 +23,6 @@ WORKDIR /build/$PROJECT/web/app/plugins/usctdp-mgmt
 RUN npm install && npm run prod
 
 # --- Stage 2: Final Production Image ---
-# Pinned to a specific hcdwp build (commit-sha-run_number, per
-# hcdwp/.github/workflows/build-and-push.yml) rather than :latest, so builds
-# here are reproducible and a bad/different bedrock rebuild can't silently
-# change what gets deployed. Bump deliberately: check
-# https://hub.docker.com/r/horsecatdog/bedrock/tags for the tag to move to,
-# or override with --build-arg BEDROCK_TAG=... for a one-off build.
-ARG BEDROCK_TAG=518a0ce450e7ab8c9a7c36b442281292eadb6123-29
 FROM horsecatdog/bedrock:${BEDROCK_TAG}
 
 # horsecatdog/bedrock:latest is an external, unpinned base image and isn't
