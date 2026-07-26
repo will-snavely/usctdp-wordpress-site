@@ -26,14 +26,53 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: "Build and push: usctdp_bedrock"
+      - name: "Build image: usctdp_bedrock (local, not pushed yet)"
         uses: docker/build-push-action@v6
         with:
           context: .
-          push: true
-          tags: |
-            ${{ secrets.DOCKERHUB_USERNAME }}/usctdp-bedrock:latest
-            ${{ secrets.DOCKERHUB_USERNAME }}/usctdp-bedrock:${{ github.sha }}
+          push: false
+          load: true
+          tags: usctdp-bedrock:scan
           build-args: |
             PROJECT=usctdp-bedrock
             THEME=usctdp-theme
+
+      # Installs the trivy CLI directly from its checksummed GitHub release
+      # rather than using aquasecurity/trivy-action - that action (and the
+      # trivy binary/setup-trivy releases around the same time) had a real
+      # supply chain compromise on 2026-03-19 that stole CI secrets from
+      # everything using it. Verifying a pinned binary against its published
+      # sha256 checksum keeps the trust surface to "one binary from the
+      # vendor", not "a third-party Action with its own compromise history
+      # and code execution". Bump TRIVY_VERSION deliberately, not blindly.
+      - name: Install trivy
+        run: |
+          set -eu
+          TRIVY_VERSION=0.72.0
+          ASSET="trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz"
+          BASE_URL="https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}"
+          curl -sSLO "$BASE_URL/$ASSET"
+          curl -sSLO "$BASE_URL/trivy_${TRIVY_VERSION}_checksums.txt"
+          grep " $ASSET\$" "trivy_${TRIVY_VERSION}_checksums.txt" | sha256sum -c -
+          tar -xzf "$ASSET" trivy
+          chmod +x trivy
+
+      # Fails the job (and blocks the push below) on any fixable
+      # CRITICAL/HIGH finding. --ignore-unfixed keeps this from permanently
+      # blocking releases on CVEs upstream hasn't patched yet - same
+      # reasoning as the npm audit triage: don't block on what you can't act
+      # on, but do block on what you can.
+      - name: Scan image with trivy
+        run: |
+          ./trivy image \
+            --severity CRITICAL,HIGH \
+            --ignore-unfixed \
+            --exit-code 1 \
+            usctdp-bedrock:scan
+
+      - name: Push image
+        run: |
+          docker tag usctdp-bedrock:scan ${{ secrets.DOCKERHUB_USERNAME }}/usctdp-bedrock:latest
+          docker tag usctdp-bedrock:scan ${{ secrets.DOCKERHUB_USERNAME }}/usctdp-bedrock:${{ github.sha }}
+          docker push ${{ secrets.DOCKERHUB_USERNAME }}/usctdp-bedrock:latest
+          docker push ${{ secrets.DOCKERHUB_USERNAME }}/usctdp-bedrock:${{ github.sha }}
