@@ -26,6 +26,9 @@ tasks:
       - cat /dev/urandom | tr -dc 'a-zA-Z0-9' | head -c 10 > .secret_db_password_prod
       - cat /dev/urandom | tr -dc 'a-zA-Z0-9' | head -c 10 > .secret_db_root_password_prod
       - cat /dev/urandom | tr -dc 'a-zA-Z0-9' | head -c 10 > .secret_admin_password_prod
+      - cat /dev/urandom | tr -dc 'a-zA-Z0-9' | head -c 10 > .secret_smtp_password_prod
+      - cat /dev/urandom | tr -dc 'a-zA-Z0-9' | head -c 10 > .secret_s3_key_file_prod
+      - cat /dev/urandom | tr -dc 'a-zA-Z0-9' | head -c 10 > .secret_s3_secret_file_prod
       - python3 gen_config.py .env.prod.template prod
 
   up:
@@ -77,4 +80,5 @@ tasks:
       - "{{.WP_CLI}} plugin activate usctdp-mgmt"
       - "{{.WP_CLI}} plugin activate user-switching"
       - "{{.WP_CLI}} plugin activate wp-mail-smtp"
+      - "{{.WP_CLI}} plugin activate two-factor"
       - "{{.WP_CLI}} theme activate usctdp-theme"

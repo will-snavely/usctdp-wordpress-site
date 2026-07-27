@@ -17,6 +17,9 @@ def apply_prod_config(env):
     env.set("DB_WORDPRESS_PASSWORD_FILE", str(current_dir / '.secret_db_password_prod')) 
     env.set("DB_ROOT_PASSWORD_FILE", str(current_dir / '.secret_db_root_password_prod')) 
     env.set("WP_ADMIN_PASSWORD_FILE", str(current_dir / '.secret_admin_password_prod')) 
+    env.set("BACKUP_S3_KEY_FILE", str(current_dir / '.secret_s3_key_file_prod')) 
+    env.set("BACKUP_S3_SECRET_FILE", str(current_dir / '.secret_s3_secret_file_prod')) 
+    env.set("SMTP_PASSWORD_FILE", str(current_dir / '.secret_smtp_password_prod')) 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
