@@ -9,11 +9,14 @@ vars:
   WP_CLI: "{{.DOCKER_COMPOSE}} exec --user www-data --workdir /www/srv/usctdp-bedrock/web/wp web wp"
   THEME_HOME: /www/srv/usctdp-bedrock/web/app/themes/usctdp-theme
   PLUGIN_HOME: /www/srv/usctdp-bedrock/web/app/plugins/usctdp-mgmt
+  BEDROCK_ENV_FILE: sage_dev/config/bedrock.env
+  APACHE_CONF_FILE: sage_dev/config/apache-wordpress.conf
+  NGINX_CONF_FILE: sage_dev/nginx/prod.conf
 
 includes:
   common:
     taskfile: ./Taskfile.common.yml
-    vars: { 
+    vars: {
       MODE: prod,
       DOCKER_COMPOSE: "{{.DOCKER_COMPOSE}}"
     }
@@ -31,32 +34,55 @@ tasks:
       - cat /dev/urandom | tr -dc 'a-zA-Z0-9' | head -c 10 > .secret_s3_secret_file_prod
       - python3 gen_config.py .env.prod.template prod
 
+  # Generates the bedrock .env, apache vhost, and nginx configs on the host
+  # and writes them to sage_dev/config and sage_dev/nginx, where compose
+  # bind-mounts them read-only into the containers. Deliberately independent
+  # of up/down: run it once after `init`, and again whenever .env.prod or
+  # .env.extra changes. A container restart or recreate just reuses whatever
+  # was last generated here - it no longer regenerates or loses config on
+  # its own, so it doesn't need this step re-run to come back up cleanly.
+  #
+  # Bedrock's auth keys are the one exception: they're preserved across
+  # re-runs (see gen_bedrock_env.py) rather than regenerated, since
+  # regenerating them would silently log everyone out on every deploy.
+  configure:
+    cmds:
+      - python3 gen_bedrock_env.py .env.prod {{.BEDROCK_ENV_FILE}} --extra .env.extra
+      - python3 gen_apache_conf.py .env.prod {{.APACHE_CONF_FILE}}
+      - python3 gen_nginx_config.py .env.prod sage_dev/nginx/prod.conf.main {{.NGINX_CONF_FILE}}
+
+  # Same as `configure`, but points nginx at the HTTP-only template needed
+  # to serve the ACME webroot challenge before a TLS cert exists yet. Use
+  # this before the very first `get-cert`; use `configure` after.
+  configure-cert-init:
+    cmds:
+      - python3 gen_bedrock_env.py .env.prod {{.BEDROCK_ENV_FILE}} --extra .env.extra
+      - python3 gen_apache_conf.py .env.prod {{.APACHE_CONF_FILE}}
+      - python3 gen_nginx_config.py .env.prod sage_dev/nginx/prod.conf.init {{.NGINX_CONF_FILE}}
+
   up:
     cmds:
-      - python3 gen_nginx_config.py .env.prod sage_dev/nginx/prod.conf.main sage_dev/nginx/prod.conf 
       - "{{.DOCKER_COMPOSE}} up -d"
-
-  config-bedrock:
-    cmds:
-      - "{{.DOCKER_COMPOSE}} exec -u root web sh /app/scripts/web/config_bedrock.sh"
-
-  config-apache:
-    cmds:
-      - "{{.DOCKER_COMPOSE}} exec -u root web sh /app/scripts/web/config_apache.sh"
 
   up-cert-init:
     cmds:
-      - python3 gen_nginx_config.py .env.prod sage_dev/nginx/prod.conf.init sage_dev/nginx/prod.conf 
       - "{{.DOCKER_COMPOSE}} up -d proxy web db"
 
   down:
     cmds:
       - "{{.DOCKER_COMPOSE}} down"
 
-  extra-config:
+  # nginx and apache don't notice their bind-mounted config file changing on
+  # its own - reload the running container after re-running `configure` (or
+  # `configure-cert-init`) if you need the new config live without a full
+  # restart, e.g. switching from the cert-init nginx config to the real one.
+  reload-proxy:
     cmds:
-      - "{{.DOCKER_COMPOSE}} cp .env.extra web:/www/srv/usctdp-bedrock/.env.extra"
+      - "{{.DOCKER_COMPOSE}} exec proxy nginx -s reload"
 
+  reload-web:
+    cmds:
+      - "{{.DOCKER_COMPOSE}} exec -u root web service apache2 reload"
 
   get-cert:
     cmds:
@@ -70,10 +96,7 @@ tasks:
 
   deploy:
     cmds:
-      - touch .env.extra
-      - "{{.DOCKER_COMPOSE}} cp .env.extra web:/www/srv/usctdp-bedrock/.env.extra"
-      - "{{.DOCKER_COMPOSE}} exec -u root web sh /app/scripts/web/config_bedrock.sh"
-      - "{{.DOCKER_COMPOSE}} exec -u root web sh /app/scripts/web/config_apache.sh"
+      - task: configure
       - "{{.DOCKER_COMPOSE}} exec --user www-data --workdir {{.WP_HOME}} web bash /app/scripts/web/install_wordpress.sh"
       - "{{.WP_CLI}} plugin activate woocommerce"
       - "{{.WP_CLI}} plugin activate contact-form-7"
