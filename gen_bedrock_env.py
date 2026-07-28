@@ -99,8 +99,9 @@ if __name__ == "__main__":
     out_path.parent.mkdir(parents=True, exist_ok=True)
     with open(out_path, "w") as f:
         for k, v in config.items():
-            if str(v).lower() in ("true", "false"):
-                f.write(f'{k}={str(v).lower()}\n')
+            cleaned = v.strip('"\'');
+            if str(cleaned).lower() in ("true", "false"):
+                f.write(f'{k}={str(cleaned).lower()}\n')
             else:
-                f.write(f'{k}="{v}"\n')
+                f.write(f'{k}="{cleaned}"\n')
         f.write(extra_config)

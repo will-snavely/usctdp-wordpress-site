@@ -94,9 +94,8 @@ tasks:
         --no-eff-email
         -d usctdp.duckdns.org -d www.usctdp.duckdns.org
 
-  deploy:
+  wp-deploy:
     cmds:
-      - task: configure
       - "{{.DOCKER_COMPOSE}} exec --user www-data --workdir {{.WP_HOME}} web bash /app/scripts/web/install_wordpress.sh"
       - "{{.WP_CLI}} plugin activate woocommerce"
       - "{{.WP_CLI}} plugin activate contact-form-7"
