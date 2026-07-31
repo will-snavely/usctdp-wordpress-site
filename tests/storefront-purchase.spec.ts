@@ -75,13 +75,15 @@ test('customer purchases a clinic registration through the WooCommerce storefron
   await page.waitForURL(/order-received/);
 
   // DB-level verification, mirroring registration.spec.ts - but this path's
-  // ledger shape is genuinely different, not just a copy-paste: COD moves
+  // ledger shape is genuinely different, not just a copy-paste. COD moves
   // the order straight to "processing", which fires
   // create_purchase_and_ledger_entries() (class-usctdp-mgmt-woocommerce-
-  // hooks.php) directly - unlike the admin pay_later path, this books BOTH
-  // entries under the same 'registration_fees' account (a self-balancing
-  // charge/payment pair), not a registration_fees/revenue split, and tags
-  // them event_id='wc_order<order_id>' with payment_method='cod'.
+  // hooks.php) directly, booking full double-entry pairs - mirroring
+  // build_ledger_entries_for_line_item() in class-usctdp-mgmt-admin-ajax.php
+  // (the admin path): charge = Dr registration_fees / Cr revenue (revenue
+  // recognition), payment = Dr payment_cod / Cr registration_fees (clearing
+  // the receivable with the cash actually received). Both pairs tagged
+  // event_id='wc_order<order_id>'.
   const [studentRow] = queryDb(
     `SELECT id FROM wp_usctdp_student WHERE first='${student.firstName}' AND last='${student.lastName}'`
   );
@@ -100,15 +102,21 @@ test('customer purchases a clinic registration through the WooCommerce storefron
   expect(purchase.type).toBe('registration');
 
   const ledgerRows = queryDb(`SELECT * FROM wp_usctdp_ledger WHERE purchase_id=${purchase.id}`);
-  expect(ledgerRows).toHaveLength(2);
-  const chargeEntry = ledgerRows.find((r) => r.entry_type === 'charge');
-  const paymentEntry = ledgerRows.find((r) => r.entry_type === 'payment');
-  expect(chargeEntry?.account).toBe('registration_fees');
-  expect(paymentEntry?.account).toBe('registration_fees');
-  expect(Number(chargeEntry?.debit)).toBe(100);
-  expect(Number(paymentEntry?.credit)).toBe(100);
-  expect(chargeEntry?.order_id).toBeTruthy();
-  expect(chargeEntry?.event_id).toBe(`wc_order${chargeEntry?.order_id}`);
-  expect(paymentEntry?.event_id).toBe(`wc_order${chargeEntry?.order_id}`);
-  expect(chargeEntry?.payment_method).toBe('cod');
+  expect(ledgerRows).toHaveLength(4);
+  const chargeFeeEntry = ledgerRows.find((r) => r.entry_type === 'charge' && r.account === 'registration_fees');
+  const revenueEntry = ledgerRows.find((r) => r.entry_type === 'charge' && r.account === 'revenue');
+  const paymentCodEntry = ledgerRows.find((r) => r.entry_type === 'payment' && r.account === 'payment_cod');
+  const paymentFeeEntry = ledgerRows.find((r) => r.entry_type === 'payment' && r.account === 'registration_fees');
+
+  expect(Number(chargeFeeEntry?.debit)).toBe(100);
+  expect(Number(revenueEntry?.credit)).toBe(100);
+  expect(Number(paymentCodEntry?.debit)).toBe(100);
+  expect(Number(paymentFeeEntry?.credit)).toBe(100);
+
+  expect(chargeFeeEntry?.order_id).toBeTruthy();
+  const orderId = chargeFeeEntry?.order_id;
+  for (const entry of [chargeFeeEntry, revenueEntry, paymentCodEntry, paymentFeeEntry]) {
+    expect(entry?.event_id).toBe(`wc_order${orderId}`);
+  }
+  expect(paymentCodEntry?.payment_method).toBe('cod');
 });

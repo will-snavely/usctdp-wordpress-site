@@ -44,17 +44,16 @@ test('registers a student for a session via the admin UI, paying later', async (
   // select back to "" whenever the balance isn't fully covered - which is
   // always true here, since this path never transfers anything to "Pay".
   // If that response arrives after the selectOption below instead of
-  // before, it clobbers the selection and hides the submit button. A plain
-  // networkidle wait before selecting isn't reliable (the response can
-  // still land in the gap between the wait resolving and the click that
-  // follows under load), so retry the select-and-check until it actually
-  // sticks rather than guessing a safe point in time.
+  // before, it clobbers the selection and hides the submit button. The
+  // actual submit click has to live INSIDE the retried block, not just a
+  // visibility check beforehand - a late reset can still land in the gap
+  // between a passing check and a separate click call, so only a failed
+  // click (not just a failed check) should trigger retrying the whole
+  // select-and-click sequence from scratch.
   await expect(async () => {
     await page.locator('#__usctdp_payment_payment_method').selectOption('pay_later');
-    await expect(page.locator('#__usctdp_payment_submit-payment-btn')).toBeVisible({ timeout: 1000 });
-  }).toPass({ timeout: 15_000 });
-
-  await page.locator('#__usctdp_payment_submit-payment-btn').click();
+    await page.locator('#__usctdp_payment_submit-payment-btn').click({ timeout: 2000 });
+  }).toPass({ timeout: 20_000 });
 
   // Real (non-AJAX) form POST to admin-post.php redirects here on success.
   // usctdp_token comes between page and family_id in the actual query
