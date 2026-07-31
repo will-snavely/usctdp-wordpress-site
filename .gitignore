@@ -1,10 +1,14 @@
 .claude
 .env.dev
 .env.prod
+.env.test
 .env.extra
 .secret*
 __pycache__/
 security/ffuf/results/
+
+# Isolated E2E test stack's copy of the bedrock project (see Taskfile.test.yml)
+projects_test/
 
 # Playwright
 node_modules/

@@ -13,11 +13,13 @@ vars:
 includes:
   common:
     taskfile: ./Taskfile.common.yml
-    vars: { 
+    vars: {
       MODE: dev,
       DOCKER_COMPOSE: "{{.DOCKER_COMPOSE}}"
     }
     flatten: true
+  test:
+    taskfile: ./Taskfile.test.yml
 
 tasks:
   init:

@@ -1,0 +1,141 @@
+# https://taskfile.dev
+#
+# Isolated Playwright E2E test stack. Kept as its own included Taskfile
+# (mirrors Taskfile.common.yml/Taskfile.prod.yml living at the repo root)
+# rather than nested under sage_dev/, since Task runs an included Taskfile's
+# commands relative to *that file's own directory* by default - keeping it
+# at the root keeps every relative path here (.env.test, secrets,
+# projects_test/, sage_dev/compose.test.yaml) resolving against the repo
+# root, same as Taskfile.yml already does.
+
+version: '3'
+
+vars:
+  DOCKER_COMPOSE_TEST: "docker compose --env-file .env.test -p usctdp_test -f sage_dev/compose.test.yaml"
+  TEST_PROJECTS_DIR: ./projects_test
+  WP_HOME: /www/srv/usctdp-bedrock/web/wp
+  WP_CLI_TEST: "{{.DOCKER_COMPOSE_TEST}} exec --user www-data --workdir /www/srv/usctdp-bedrock/web/wp web wp"
+
+tasks:
+  init:
+    desc: Generate .env.test and its secrets (skips any that already exist).
+    cmds:
+      - test -f .secret_db_password_test || (cat /dev/urandom | tr -dc 'a-zA-Z0-9' | head -c 10 > .secret_db_password_test)
+      - test -f .secret_db_root_password_test || (cat /dev/urandom | tr -dc 'a-zA-Z0-9' | head -c 10 > .secret_db_root_password_test)
+      - test -f .secret_admin_password_test || (cat /dev/urandom | tr -dc 'a-zA-Z0-9' | head -c 10 > .secret_admin_password_test)
+      - python3 gen_config.py .env.test.template test
+
+  sync:
+    desc: Copy the built dev project (theme/plugin assets, vendor) into an isolated tree for the test stack.
+    cmds:
+      - mkdir -p {{.TEST_PROJECTS_DIR}}
+      # web/.htaccess is deliberately hardened to root:root 444 by the web
+      # container's entrypoint (update_dev_permissions.sh) on every start,
+      # in both the dev copy and this one - an unprivileged rsync can create
+      # it fresh but can't update its metadata once it exists (that's the
+      # whole point of the hardening). Deleting it first (allowed - unlink
+      # only needs write access to the parent dir, not the file itself)
+      # sidesteps that; the container re-hardens its copy again on next up.
+      - rm -f {{.TEST_PROJECTS_DIR}}/usctdp-bedrock/web/.htaccess
+      - >
+        rsync -a
+        --exclude='.git' --exclude='node_modules'
+        --exclude='web/app/cache' --exclude='web/app/uploads' --exclude='.env'
+        projects/usctdp-bedrock/ {{.TEST_PROJECTS_DIR}}/usctdp-bedrock/
+
+  up:
+    desc: Bring up the isolated test stack (http://127.0.0.2).
+    deps: [init, sync]
+    cmds:
+      - "{{.DOCKER_COMPOSE_TEST}} up -d"
+
+  down:
+    desc: Tear down the test stack, keeping its data volumes.
+    cmds:
+      - "{{.DOCKER_COMPOSE_TEST}} down"
+
+  reset:
+    desc: Tear down the test stack and delete its data volumes.
+    cmds:
+      - "{{.DOCKER_COMPOSE_TEST}} down -v"
+
+  wait-db:
+    internal: true
+    cmds:
+      # A root `ping` isn't enough: the official mariadb image briefly runs
+      # a *temporary* internal server to execute init SQL (create the
+      # wordpress_test DB/user), shuts it down, then starts the real one -
+      # a root ping can succeed against that temporary instance moments
+      # before the port briefly closes for the handoff, so install_wordpress
+      # then hits a connection refused. Connecting as the actual app user to
+      # the actual app DB only succeeds once init SQL has fully run on the
+      # final server, which is what's actually being waited for.
+      # `< /dev/null` on the exec: docker compose exec -T disables the
+      # pseudo-TTY but still attaches stdin, and stdin under Task's
+      # non-interactive execution never sends EOF on its own - docker's
+      # exec then waits on that stdin stream indefinitely even though the
+      # containered mariadb command itself already finished. Feeding it an
+      # already-closed stdin sidesteps the hang entirely. (Matches the
+      # symptom seen: identical command worked instantly typed into a real
+      # terminal, hung every time under `task`.)
+      - >
+        timeout 180 sh -c 'until {{.DOCKER_COMPOSE_TEST}} exec -T db mariadb -h127.0.0.1 -uwordpress_test -p"$(cat .secret_db_password_test)" wordpress_test -e "SELECT 1" >/dev/null 2>&1 </dev/null; do sleep 2; done'
+
+  seed:
+    internal: true
+    desc: Install WordPress and activate the theme/plugins against the running test DB.
+    deps: [wait-db]
+    cmds:
+      - "{{.DOCKER_COMPOSE_TEST}} exec web python3 /app/scripts/web/gen_bedrock_config.py usctdp-bedrock"
+      - "{{.DOCKER_COMPOSE_TEST}} exec web python3 /app/scripts/web/gen_apache_config.py usctdp-bedrock"
+      - "{{.DOCKER_COMPOSE_TEST}} exec web a2ensite wordpress"
+      - "{{.DOCKER_COMPOSE_TEST}} exec web a2enmod rewrite"
+      - "{{.DOCKER_COMPOSE_TEST}} exec web a2dissite 000-default"
+      - "{{.DOCKER_COMPOSE_TEST}} exec web service apache2 reload"
+      - "{{.DOCKER_COMPOSE_TEST}} exec --user www-data --workdir {{.WP_HOME}} web bash /app/scripts/web/install_wordpress.sh"
+      - "{{.WP_CLI_TEST}} plugin activate woocommerce usctdp-mgmt user-switching wp-mail-smtp two-factor"
+      - "{{.WP_CLI_TEST}} theme activate usctdp-theme"
+      # Both wp-mail-smtp (Core.php) and WooCommerce
+      # (OnboardingSetupWizard.php) set a transient on activation that
+      # redirects the *next* authenticated admin page load to their own
+      # setup wizard, taking over the screen. Fine for a human clicking
+      # through setup once; unwanted for a scripted admin session that
+      # expects the normal dashboard.
+      - "{{.WP_CLI_TEST}} transient delete wp_mail_smtp_activation_redirect"
+      - "{{.WP_CLI_TEST}} transient delete _wc_activation_redirect"
+      # A fresh WP install defaults to "Plain" permalinks (?page_id=N). This
+      # site's WooCommerce/usctdp-mgmt account endpoints (My Account > Family
+      # etc., see class-usctdp-mgmt-activator.php) need pretty permalinks -
+      # without them, WooCommerce's own canonical-redirect logic for the My
+      # Account page loops indefinitely. The dev DB has had this set once,
+      # manually, since it was first created; a fresh test install needs it
+      # done explicitly every time.
+      #
+      # `wp rewrite structure` (default, non---hard mode - --hard also
+      # tries to regenerate web/.htaccess via a self-HTTP request, which is
+      # both pointless here since .htaccess is hand-authored and made
+      # read-only by update_dev_permissions.sh specifically to block that,
+      # and was a source of flakiness) reliably prints "Success: Rewrite
+      # structure set." and then, just as reliably, exits 1 with a trailing
+      # "Error establishing a database connection" from something internal
+      # to the command itself. Manually verified the resulting site works
+      # correctly regardless, so `|| true` here rather than failing the
+      # whole seed over a wp-cli-internal exit code that doesn't reflect
+      # the operation's actual outcome.
+      - "{{.WP_CLI_TEST}} rewrite structure '/%postname%/' || true"
+
+  e2e:
+    desc: Run the Playwright suite against a fresh, isolated test stack. Always tears the stack down afterward, even on failure.
+    cmds:
+      - task: init
+      - task: sync
+      - task: reset
+      - task: up
+      - defer:
+          task: reset
+      - task: seed
+      - >
+        E2E_ADMIN_USER=$(grep '^WP_ADMIN_USER=' .env.test | cut -d= -f2- | tr -d '"')
+        E2E_ADMIN_PASSWORD=$(cat .secret_admin_password_test)
+        PLAYWRIGHT_BASE_URL=http://127.0.0.1:8180
+        npx playwright test

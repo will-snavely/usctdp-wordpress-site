@@ -13,6 +13,11 @@ import { defineConfig, devices } from '@playwright/test';
  */
 export default defineConfig({
   testDir: './tests',
+  /* Default 30s was too tight for the very first page load against a
+   * freshly-seeded test stack (cold theme/WooCommerce asset cache) -
+   * observed timing out on auth.setup.ts even though the page had, in
+   * fact, finished rendering by the time the timeout fired. */
+  timeout: 60_000,
   /* Run tests in files in parallel */
   fullyParallel: true,
   /* Fail the build on CI if you accidentally left test.only in the source code. */
@@ -26,7 +31,10 @@ export default defineConfig({
   /* Shared settings for all the projects below. See https://playwright.dev/docs/api/class-testoptions. */
   use: {
     /* Base URL to use in actions like `await page.goto('')`. */
-    baseURL: 'http://usctdp.local',
+    // Points at the isolated test stack (`task test:up`/`task test:e2e`,
+    // see Taskfile.test.yml) by default - override with PLAYWRIGHT_BASE_URL
+    // to run against something else.
+    baseURL: process.env.PLAYWRIGHT_BASE_URL ?? 'http://127.0.0.1:8180',
 
     /* Collect trace when retrying the failed test. See https://playwright.dev/docs/trace-viewer */
     trace: 'on-first-retry',
