@@ -24,8 +24,11 @@ export default defineConfig({
   forbidOnly: !!process.env.CI,
   /* Retry on CI only */
   retries: process.env.CI ? 2 : 0,
-  /* Opt out of parallel tests on CI. */
-  workers: process.env.CI ? 1 : undefined,
+  /* Always serial, not just on CI: every test here shares one Apache/MySQL
+   * container in the isolated test stack (Taskfile.test.yml), which can't
+   * absorb concurrent browser sessions hammering it - observed as flaky
+   * SweetAlert2/redirect timing specifically when 2 workers ran at once. */
+  workers: 1,
   /* Reporter to use. See https://playwright.dev/docs/test-reporters */
   reporter: 'html',
   /* Shared settings for all the projects below. See https://playwright.dev/docs/api/class-testoptions. */

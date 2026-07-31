@@ -1,0 +1,18 @@
+{
+  "clinics": [
+    {
+      "name": "Test Clinic",
+      "code": "test-clinic",
+      "session_category": "Junior: Beginner",
+      "age_group": "Juniors",
+      "level": "Beginner",
+      "age_range": "5 and up",
+      "description": "A test clinic used only by the Playwright E2E suite.",
+      "short_description": "Test clinic for E2E tests.",
+      "image_id": "test-image-id",
+      "flyer_id": "test-flyer-id"
+    }
+  ],
+  "tournaments": [],
+  "merchandise": []
+}
