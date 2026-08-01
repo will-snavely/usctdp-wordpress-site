@@ -70,6 +70,17 @@ jobs:
             --exit-code 1 \
             usctdp-bedrock:scan
 
+      # Checks installed WordPress core/plugin/theme versions (from
+      # composer.lock) against WPScan's vulnerability database. Added after
+      # the 2026-08-01 incident - trivy covers OS/package-level CVEs, but
+      # WordPress-ecosystem vulnerabilities (core, plugins, themes) are a
+      # separate database it doesn't know about. Needs WPSCAN_API_TOKEN as a
+      # repo secret (free tier - register at https://wpscan.com/register).
+      - name: Check WordPress core/plugins/themes against WPScan
+        env:
+          WPSCAN_API_TOKEN: ${{ secrets.WPSCAN_API_TOKEN }}
+        run: python3 security/wpscan_check.py
+
       - name: Push image
         run: |
           docker tag usctdp-bedrock:scan ${{ secrets.DOCKERHUB_USERNAME }}/usctdp-bedrock:latest
