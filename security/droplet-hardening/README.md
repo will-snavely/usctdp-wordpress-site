@@ -6,9 +6,11 @@ run the whole directory blind. Written for Ubuntu 22.04/24.04.
 ## Order matters, especially the first two
 
 1. `01-create-sudo-user.sh <username>` - creates a non-root sudo user and
-   copies your current SSH key to it. **Stop after this and verify you can
-   actually log in as that user, in a separate terminal, before going
-   further.**
+   copies your current SSH key to it. It'll also prompt you to set a local
+   password for the account if it doesn't have one - that's for `sudo`'s own
+   prompt, which checks separately from SSH login (which stays key-only).
+   **Stop after this and verify you can actually log in as that user, in a
+   separate terminal, before going further.**
 2. `02-harden-ssh.sh` - disables root login and password auth. Refuses to
    run until you confirm you've done the verification from step 1. If you
    skip that verification and this locks you out, recovery means

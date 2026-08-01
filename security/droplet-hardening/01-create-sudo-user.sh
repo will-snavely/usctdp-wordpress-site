@@ -42,6 +42,19 @@ chown -R "$USERNAME:$USERNAME" "$DEST_HOME/.ssh"
 chmod 700 "$DEST_HOME/.ssh"
 chmod 600 "$DEST_HOME/.ssh/authorized_keys"
 
+# adduser --disabled-password means exactly that - no password at all, not
+# just "can't use it over SSH". sudo's own PAM prompt still needs one to
+# authenticate against, and that check is completely separate from sshd's
+# PasswordAuthentication setting (which 02-harden-ssh.sh turns off) - so
+# setting a password here doesn't reopen remote password login, it just
+# lets sudo work once you're already in via your key.
+if [ "$(passwd -S "$USERNAME" | awk '{print $2}')" != "P" ]; then
+  echo
+  echo "'$USERNAME' has no password yet, and sudo needs one even though SSH"
+  echo "login for this user is key-only. Set one now:"
+  passwd "$USERNAME"
+fi
+
 echo
 echo "=================================================================="
 echo " STOP. Do not proceed to 02-harden-ssh.sh yet."
