@@ -92,7 +92,7 @@ tasks:
         --email will.snavely@gmail.com
         --agree-tos
         --no-eff-email
-        -d usctdp.duckdns.org -d www.usctdp.duckdns.org
+        -d usctdp.com -d www.usctdp.com
 
   wp-deploy:
     cmds:
