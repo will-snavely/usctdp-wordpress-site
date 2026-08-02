@@ -169,3 +169,19 @@ export async function selectFromSelect2(
   // can't click through 5 dropdowns fast enough to hit this; a script can.
   await page.waitForLoadState('networkidle');
 }
+
+/**
+ * Selects one of a select2-based cascading dropdown's "pinned" options (e.g.
+ * session-selector's "🎾 Merchandise Only" / "➕ New Special Session") -
+ * these come from the client-side `pinnedOptions` list in select2Options
+ * (usctdp-mgmt-admin.js), which is only spliced into the results when the
+ * search box is empty (`isSearching` false), so unlike selectFromSelect2,
+ * this opens the dropdown and clicks without typing anything first.
+ */
+export async function selectPinnedOption(page: Page, selectId: string, optionText: string) {
+  await page.locator(`#select2-${selectId}-container`).click();
+  const option = page.locator('.select2-results__option', { hasText: optionText }).first();
+  await option.waitFor({ state: 'visible' });
+  await option.click();
+  await page.waitForLoadState('networkidle');
+}

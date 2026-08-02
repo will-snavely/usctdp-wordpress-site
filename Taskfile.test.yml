@@ -1,12 +1,10 @@
 # https://taskfile.dev
 #
 # Isolated Playwright E2E test stack. Kept as its own included Taskfile
-# (mirrors Taskfile.common.yml/Taskfile.prod.yml living at the repo root)
-# rather than nested under sage_dev/, since Task runs an included Taskfile's
-# commands relative to *that file's own directory* by default - keeping it
-# at the root keeps every relative path here (.env.test, secrets,
-# projects_test/, sage_dev/compose.test.yaml) resolving against the repo
-# root, same as Taskfile.yml already does.
+# (like Taskfile.common.yml/Taskfile.prod.yml) rather than nested under
+# sage_dev/, since Task resolves an included Taskfile's relative paths
+# against *that file's own directory* - staying at the root keeps paths
+# here resolving the same as Taskfile.yml's.
 
 version: '3'
 
@@ -29,13 +27,11 @@ tasks:
     desc: Copy the built dev project (theme/plugin assets, vendor) into an isolated tree for the test stack.
     cmds:
       - mkdir -p {{.TEST_PROJECTS_DIR}}
-      # web/.htaccess is deliberately hardened to root:root 444 by the web
-      # container's entrypoint (update_dev_permissions.sh) on every start,
-      # in both the dev copy and this one - an unprivileged rsync can create
-      # it fresh but can't update its metadata once it exists (that's the
-      # whole point of the hardening). Deleting it first (allowed - unlink
-      # only needs write access to the parent dir, not the file itself)
-      # sidesteps that; the container re-hardens its copy again on next up.
+      # web/.htaccess is hardened to root:root 444 by the web container's
+      # entrypoint on every start, so an unprivileged rsync can recreate it
+      # but not update it in place. Deleting it first (unlink only needs
+      # write access to the parent dir) sidesteps that; the container
+      # re-hardens the fresh copy on next up.
       - rm -f {{.TEST_PROJECTS_DIR}}/usctdp-bedrock/web/.htaccess
       - >
         rsync -a
@@ -44,9 +40,8 @@ tasks:
         projects/usctdp-bedrock/ {{.TEST_PROJECTS_DIR}}/usctdp-bedrock/
       # Minimal test-only fixtures (one clinic, one session, one priced
       # activity) for `wp usctdp import_products`/`import_sessions` - kept
-      # as separate files rather than overwriting the real data/*.json, and
-      # copied in after the rsync above since rsync --delete would remove
-      # anything not present in the source project.
+      # separate from the real data/*.json, and copied in after rsync so a
+      # future --delete wouldn't wipe them.
       - cp tests/fixtures/e2e-products.json {{.TEST_PROJECTS_DIR}}/usctdp-bedrock/data/e2e-products.json
       - cp tests/fixtures/e2e-sessions.json {{.TEST_PROJECTS_DIR}}/usctdp-bedrock/data/e2e-sessions.json
 
@@ -69,22 +64,16 @@ tasks:
   wait-db:
     internal: true
     cmds:
-      # A root `ping` isn't enough: the official mariadb image briefly runs
-      # a *temporary* internal server to execute init SQL (create the
-      # wordpress_test DB/user), shuts it down, then starts the real one -
-      # a root ping can succeed against that temporary instance moments
-      # before the port briefly closes for the handoff, so install_wordpress
-      # then hits a connection refused. Connecting as the actual app user to
-      # the actual app DB only succeeds once init SQL has fully run on the
-      # final server, which is what's actually being waited for.
-      # `< /dev/null` on the exec: docker compose exec -T disables the
-      # pseudo-TTY but still attaches stdin, and stdin under Task's
-      # non-interactive execution never sends EOF on its own - docker's
-      # exec then waits on that stdin stream indefinitely even though the
-      # containered mariadb command itself already finished. Feeding it an
-      # already-closed stdin sidesteps the hang entirely. (Matches the
-      # symptom seen: identical command worked instantly typed into a real
-      # terminal, hung every time under `task`.)
+      # A root ping isn't enough: mariadb's image briefly runs a temporary
+      # internal server for init SQL, then restarts as the real one - a
+      # ping can succeed against that temporary instance moments before
+      # the handoff. Connecting as the app user to the app DB only
+      # succeeds once init SQL has fully run on the final server.
+      # `< /dev/null`: exec -T attaches stdin without a TTY, and Task's
+      # non-interactive stdin never sends EOF, so docker hangs waiting on
+      # it even after the command finishes. Closed stdin avoids the hang
+      # (reproduced: instant in a real terminal, hangs every time under
+      # `task`).
       - >
         timeout 180 sh -c 'until {{.DOCKER_COMPOSE_TEST}} exec -T db mariadb -h127.0.0.1 -uwordpress_test -p"$(cat .secret_db_password_test)" wordpress_test -e "SELECT 1" >/dev/null 2>&1 </dev/null; do sleep 2; done'
 
@@ -103,89 +92,61 @@ tasks:
       # Minimal product/session/activity/pricing fixtures for the
       # registration test - see tests/fixtures/e2e-*.json. `true` (2nd arg)
       # skips import_products' image/flyer downloads (real URLs point at
-      # Google Drive; skipped downloads just leave products imageless,
-      # which is fine here).
+      # Google Drive); fine since the products don't need images here.
       - "{{.WP_CLI_TEST}} usctdp import_products /www/srv/usctdp-bedrock/data/e2e-products.json true"
       - "{{.WP_CLI_TEST}} usctdp import_sessions /www/srv/usctdp-bedrock/data/e2e-sessions.json"
       - "{{.WP_CLI_TEST}} theme activate usctdp-theme"
-      # The real (non-fixture) page manifest: sets the permalink structure,
-      # disables product reviews, and - the part that matters for the
-      # storefront-purchase test - overwrites the auto-created Cart/Checkout
-      # pages with the classic [woocommerce_cart]/[woocommerce_checkout]
-      # shortcodes. The site doesn't support WooCommerce Blocks checkout
-      # (heavy template overrides assume the classic flow), so this needs to
-      # be part of the test stack's setup, not just prod's - without it, the
-      # test stack renders the default Blocks checkout, which never fires
-      # woocommerce_after_checkout_validation (a classic-only hook), silently
-      # skipping this site's capacity-check/registration-creation logic.
+      # Real (non-fixture) page manifest: sets the permalink structure,
+      # disables product reviews, and replaces the auto-created
+      # Cart/Checkout pages with classic shortcodes. Needed here too (not
+      # just prod's) because this site's template overrides assume the
+      # classic checkout flow - without it, the default Blocks checkout
+      # never fires woocommerce_after_checkout_validation, silently
+      # skipping capacity-check/registration-creation logic.
       - "{{.WP_CLI_TEST}} usctdp import_pages /www/srv/usctdp-bedrock/data/pages.json"
-      # Storefront-purchase test prerequisites. Neither is set up by the
-      # importer/a fresh WC install, and both are needed for a hermetic,
+      # Storefront-purchase test prerequisites - neither set up by the
+      # importer or a fresh WC install, both needed for a hermetic,
       # no-shipping-zone, no-real-gateway checkout:
-      # 1. Nothing in usctdp-mgmt ever calls set_virtual() on these
-      #    clinic/tournament products, so they default to WooCommerce's
-      #    standard shippable-physical-product behavior, which would need a
-      #    shipping zone/method configured before checkout allows placing an
-      #    order at all. Marking the test product (and its variations -
-      #    WooCommerce checks each cart line individually) virtual sidesteps
-      #    needing any shipping setup, and doesn't affect anything the
-      #    registration/admin-purchase flow relies on.
-      # 2. Cash on Delivery is WooCommerce core's zero-integration gateway
-      #    (no external API, no sandbox credentials) and - unlike
-      #    BACS/Cheque, which land on "on-hold" - drives the order straight
-      #    to "processing" by default, which is one of the two hooks
-      #    (woocommerce_order_status_processing / woocommerce_payment_complete)
-      #    that fire this site's own purchase/ledger creation
-      #    (class-usctdp-mgmt.php's define_woocommerce_hooks()).
+      # 1. These clinic/tournament products (and their variations) default
+      #    to shippable-physical behavior, which needs a shipping
+      #    zone/method before checkout allows an order. Marking them
+      #    virtual sidesteps that without affecting the
+      #    registration/admin-purchase flow.
+      # 2. Cash on Delivery is WC's zero-integration gateway and - unlike
+      #    BACS/Cheque, which land on "on-hold" - drives orders straight to
+      #    "processing", one of the two hooks that fire this site's
+      #    purchase/ledger creation (define_woocommerce_hooks() in
+      #    class-usctdp-mgmt.php).
       - >
         {{.WP_CLI_TEST}} eval '$id = wc_get_product_id_by_sku("clinic-test-clinic"); $p = wc_get_product($id); $p->set_virtual(true); $p->save(); foreach ($p->get_children() as $vid) { $v = wc_get_product($vid); $v->set_virtual(true); $v->save(); }'
       - >
         {{.WP_CLI_TEST}} eval '$s = get_option("woocommerce_cod_settings", array()); $s["enabled"] = "yes"; update_option("woocommerce_cod_settings", $s);'
-      # A fresh WooCommerce install defaults to "Coming Soon" store mode
-      # (onboarding-only state - a real launched site wouldn't have this
-      # enabled), which shows non-admins a placeholder instead of the real
-      # store on every product/shop/cart/checkout page. Also surfaced a real
-      # bug: WooCommerce renders that placeholder via a get_header() call
-      # that bypasses normal single-product setup, and usctdp-mgmt's
-      # enqueue_scripts() assumed the $product global would always be a
-      # WC_Product on any is_product() page - fixed separately in
-      # class-usctdp-mgmt-public.php, but the storefront test still needs
-      # the real store live to test anything.
+      # A fresh WooCommerce install defaults to "Coming Soon" store mode,
+      # showing non-admins a placeholder instead of the real store - the
+      # storefront test needs the real store live. This also surfaced a
+      # real bug (fixed separately in class-usctdp-mgmt-public.php): that
+      # placeholder's render path left $product not a WC_Product on
+      # is_product() pages, which usctdp-mgmt's enqueue_scripts() assumed.
       - "{{.WP_CLI_TEST}} option update woocommerce_coming_soon no"
-      # Both wp-mail-smtp (Core.php) and WooCommerce
-      # (OnboardingSetupWizard.php) set a transient on activation that
-      # redirects the *next* authenticated admin page load to their own
-      # setup wizard, taking over the screen. Fine for a human clicking
-      # through setup once; unwanted for a scripted admin session that
-      # expects the normal dashboard.
+      # wp-mail-smtp and WooCommerce each set an activation transient that
+      # redirects the next admin page load to their setup wizard - fine
+      # for a human, unwanted for a scripted admin session.
       - "{{.WP_CLI_TEST}} transient delete wp_mail_smtp_activation_redirect"
       - "{{.WP_CLI_TEST}} transient delete _wc_activation_redirect"
-      # A fresh WP install defaults to "Plain" permalinks (?page_id=N). This
-      # site's WooCommerce/usctdp-mgmt account endpoints (My Account > Family
-      # etc., see class-usctdp-mgmt-activator.php) need pretty permalinks -
-      # without them, WooCommerce's own canonical-redirect logic for the My
-      # Account page loops indefinitely. The dev DB has had this set once,
-      # manually, since it was first created; a fresh test install needs it
-      # done explicitly every time.
+      # A fresh WP install defaults to "Plain" permalinks. This site's
+      # WooCommerce/usctdp-mgmt account endpoints need pretty permalinks,
+      # or the My Account canonical-redirect loops indefinitely - the dev
+      # DB has had this set manually since creation, but a fresh test
+      # install needs it done explicitly.
       #
-      # `wp rewrite structure '/%postname%/'` used to be the final word here,
-      # but `usctdp import_pages` (above) already sets permalink_structure to
-      # this same value - and `rewrite structure` apparently no-ops the
-      # actual rule regeneration when the target structure already matches
-      # the current option (confirmed empirically: product pages 404'd after
-      # import_pages ran first, and a plain `wp rewrite flush` - which
-      # unconditionally regenerates rules regardless of whether the
-      # structure string changed - fixed it). `rewrite flush` (default,
-      # non---hard mode - --hard also tries to regenerate web/.htaccess via
-      # a self-HTTP request, which is both pointless here since .htaccess is
-      # hand-authored and made read-only by update_dev_permissions.sh
-      # specifically to block that, and was a source of flakiness) reliably
-      # prints "Success: Rewrite rules flushed." and then, just as reliably,
-      # exits 1 with a trailing "Error establishing a database connection"
-      # from something internal to the command itself. Manually verified the
-      # resulting site works correctly regardless, so `|| true` here rather
-      # than failing the whole seed over a wp-cli-internal exit code that
-      # doesn't reflect the operation's actual outcome.
+      # `rewrite structure` no-ops rule regeneration when the target
+      # structure already matches (import_pages above already sets it,
+      # confirmed empirically via 404s), so `rewrite flush` is used
+      # instead (non---hard: --hard tries to regenerate the hand-authored,
+      # read-only web/.htaccess, which is both pointless and flaky). It
+      # reliably prints success but still exits 1 with an unrelated
+      # internal DB-connection error - verified the site works regardless,
+      # hence `|| true`.
       - "{{.WP_CLI_TEST}} rewrite flush || true"
 
   e2e:

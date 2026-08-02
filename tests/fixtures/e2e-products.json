@@ -14,5 +14,12 @@
     }
   ],
   "tournaments": [],
-  "merchandise": []
+  "merchandise": [
+    {
+      "name": "Test Racket",
+      "code": "racket",
+      "price": 65,
+      "description": "A test racket used only by the Playwright E2E suite."
+    }
+  ]
 }
