@@ -103,4 +103,5 @@ tasks:
       - "{{.WP_CLI}} plugin activate user-switching"
       - "{{.WP_CLI}} plugin activate wp-mail-smtp"
       - "{{.WP_CLI}} plugin activate two-factor"
+      - "{{.WP_CLI}} plugin activate seo-by-rank-math"
       - "{{.WP_CLI}} theme activate usctdp-theme"
