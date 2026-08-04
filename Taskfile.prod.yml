@@ -84,6 +84,18 @@ tasks:
     cmds:
       - "{{.DOCKER_COMPOSE}} exec -u root web service apache2 reload"
 
+  # Pulls the new web image and recreates just that container, then reloads
+  # proxy so nginx re-resolves web's new IP - without this, proxy keeps
+  # sending traffic to the old (now-gone) container's IP and every request
+  # 502s until something reloads it. proxy's depends_on: web only affects
+  # start order, not recreation of an already-running stack, so this step
+  # doesn't happen on its own.
+  update-web:
+    cmds:
+      - "{{.DOCKER_COMPOSE}} pull web"
+      - "{{.DOCKER_COMPOSE}} up -d web"
+      - task: reload-proxy
+
   get-cert:
     cmds:
       - >
