@@ -44,6 +44,7 @@ The second flow is a merchant-initiated transaction against a stored credential,
 capability that specifically requires this request - it is addressed directly by the consent
 model below.
 
+
 ## 4. Customer consent
 
 Payment information is only stored with the customer's explicit, affirmative consent, captured
