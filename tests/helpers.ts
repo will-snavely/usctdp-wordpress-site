@@ -34,6 +34,29 @@ export function queryDb(sql: string): Record<string, string>[] {
   });
 }
 
+/**
+ * Runs a WP-CLI command directly against the isolated test stack's `web`
+ * container - same docker-exec mechanism as queryDb() above (see its doc
+ * comment), just targeting the `web` service's `wp` binary instead of the
+ * `db` service's mariadb client. Mirrors Taskfile.test.yml's WP_CLI_TEST
+ * var exactly (env file, project name, compose file, --user/--workdir).
+ * Returns trimmed stdout - callers that need structured output should
+ * pass `--format=json` themselves and JSON.parse() it.
+ */
+export function runWpCli(args: string[]): string {
+  const output = execFileSync(
+    'docker',
+    [
+      'compose', '--env-file', '.env.test', '-p', 'usctdp_test',
+      '-f', 'sage_dev/compose.test.yaml', 'exec',
+      '--user', 'www-data', '--workdir', '/www/srv/usctdp-bedrock/web/wp',
+      'web', 'wp', ...args,
+    ],
+    { encoding: 'utf8' }
+  );
+  return output.trim();
+}
+
 export interface FamilyDetails {
   lastName: string;
   address: string;

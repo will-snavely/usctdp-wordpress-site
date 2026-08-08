@@ -44,6 +44,14 @@ tasks:
       # future --delete wouldn't wipe them.
       - cp tests/fixtures/e2e-products.json {{.TEST_PROJECTS_DIR}}/usctdp-bedrock/data/e2e-products.json
       - cp tests/fixtures/e2e-sessions.json {{.TEST_PROJECTS_DIR}}/usctdp-bedrock/data/e2e-sessions.json
+      # TEST-ONLY: wires up the checkout-lock delay hook
+      # tests/capacity-concurrency.spec.ts uses to force a genuine race
+      # (see that mu-plugin's own doc comment for the full reasoning).
+      # Lives only in this isolated tree, never in projects/usctdp-bedrock -
+      # the real, deployed one - which is exactly why it's copied in here
+      # rather than committed under web/app/mu-plugins/ directly.
+      - mkdir -p {{.TEST_PROJECTS_DIR}}/usctdp-bedrock/web/app/mu-plugins
+      - cp tests/fixtures/mu-plugins/usctdp-test-lock-delay.php {{.TEST_PROJECTS_DIR}}/usctdp-bedrock/web/app/mu-plugins/usctdp-test-lock-delay.php
 
   up:
     desc: Bring up the isolated test stack (http://127.0.0.1:8180).
