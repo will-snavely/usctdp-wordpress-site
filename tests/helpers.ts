@@ -67,12 +67,20 @@ export interface FamilyDetails {
   phone: string;
 }
 
+let uniqueFamilyCounter = 0;
+
 // Unique per call: create_family provisions a WP user keyed off
 // last-name + last-4-of-phone (user_login) and the raw email, both of
 // which must be unique or wp_insert_user fails and the family row gets
-// rolled back server-side.
+// rolled back server-side. Date.now() alone isn't enough - a caller that
+// fires two of these synchronously back-to-back (e.g.
+// capacity-concurrency.spec.ts building familyA/familyB with nothing but
+// object-literal construction in between) can land both calls in the same
+// millisecond, producing identical lastName/phone and colliding on
+// wp_insert_user. The counter guarantees distinctness regardless of
+// timing; Date.now() keeps values distinct across separate test runs.
 export function uniqueFamilyDetails(): FamilyDetails {
-  const unique = Date.now().toString().slice(-8);
+  const unique = `${Date.now().toString().slice(-6)}${(uniqueFamilyCounter++ % 100).toString().padStart(2, '0')}`;
   return {
     lastName: `Testerson${unique}`,
     address: '123 Main St',

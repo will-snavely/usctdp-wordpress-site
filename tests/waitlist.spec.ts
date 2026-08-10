@@ -409,4 +409,83 @@ test.describe('two clinics sharing a reservation group at full capacity', () => 
     // any currently-selected day is full.
     await expect(page.locator('.single_add_to_cart_button')).toHaveClass(/usctdp-cart-disabled/);
   });
+
+  // Regression test for a real bug: get_clinics() (class-usctdp-mgmt-public.php)
+  // used to `SELECT *` across usctdp_activity/usctdp_clinic/usctdp_reservation_group
+  // joined together - all three have their own `id` column, and $wpdb
+  // silently collapsed them down to the LAST one (resg.id, the shared
+  // GROUP's id) when hydrating rows. The day picker uses that id verbatim
+  // as its option value, so every id-sensitive action downstream (Add to
+  // Waitlist, add-to-cart, checkout) ended up trusting a reservation group
+  // id instead of the clinic's own activity id.
+  //
+  // This is invisible for a clinic in its own dedicated 1:1 group, since
+  // that group's id happens to equal the activity's own id by construction
+  // (both created in lockstep at import time) - masking the bug. It only
+  // surfaces once two activities share a real merged group, because
+  // merge_reservation_group always allocates a brand-new group row (see
+  // Usctdp_Manage_Reservation_Groups::merge()), so the shared group's id is
+  // never one of the merged activities' own ids. Assert that precondition
+  // explicitly, rather than leaning on it as an accident of fixture
+  // insertion order - it's what makes this test capable of catching the bug
+  // at all, unlike the two tests above it, which only check
+  // capacity/full-state UI text and would pass identically whether or not
+  // the id were correct.
+  test("Add to Waitlist uses the clinic's own activity id, not the shared group id", async ({ page }) => {
+    expect(sharedGroupId).not.toBe(clinic2ActivityId);
+    expect(sharedGroupId).not.toBe(clinic1ActivityId);
+
+    const family = uniqueFamilyDetails();
+    await createFamily(page, family);
+
+    const student = {
+      firstName: 'Observer',
+      lastName: family.lastName,
+      birthdate: '2015-06-01',
+      level: 'Beginner',
+    };
+    await createStudent(page, student);
+    const [studentRow] = queryDb(
+      `SELECT id FROM wp_usctdp_student WHERE first='${student.firstName}' AND last='${student.lastName}'`
+    );
+    expect(studentRow).toBeTruthy();
+
+    await switchToUser(page, family.email);
+
+    await page.goto('/product/test-clinic/');
+    await page.locator('#days-per-week').selectOption('One');
+    await selectFromSelect2(page, 'student_select', student.firstName);
+    await selectFromSelect2(page, 'day_of_week_1', 'Wednesday');
+
+    // The picker option's value is `clinic.id` straight from
+    // GET /usctdp-mgmt/v1/clinics/{session}/{product} (add_day_selector() in
+    // usctdp-mgmt-product.js) - must be the Wednesday clinic's own activity
+    // id, never the shared group both clinics point at.
+    const selectedOption = page.locator('#day_of_week_1 option:checked');
+    await expect(selectedOption).toHaveAttribute('value', clinic2ActivityId!);
+
+    const daySelector = page.locator('.usctdp-day-selector').first();
+    const waitlistBtn = daySelector.locator('.add-waitlist-btn');
+    await expect(waitlistBtn).toBeEnabled();
+    await waitlistBtn.click();
+    await expect(waitlistBtn).toHaveText('Added to Waitlist');
+
+    // DB-level confirmation: create_waitlist_entry() (class-usctdp-mgmt-public.php)
+    // re-validates activity_id against usctdp_activity before writing
+    // anything, so if the button had submitted sharedGroupId instead, this
+    // insert would have been rejected outright (WP_Error 'invalid_activity')
+    // rather than landing under the wrong id - either way, this exact row
+    // shouldn't exist unless the real activity id made it all the way
+    // through.
+    const waitlistRows = queryDb(
+      `SELECT * FROM wp_usctdp_waitlist WHERE student_id=${studentRow.id} AND activity_id=${clinic2ActivityId}`
+    );
+    expect(waitlistRows).toHaveLength(1);
+    expect(waitlistRows[0].status).toBe('pending');
+
+    const groupIdWaitlistRows = queryDb(
+      `SELECT * FROM wp_usctdp_waitlist WHERE student_id=${studentRow.id} AND activity_id=${sharedGroupId}`
+    );
+    expect(groupIdWaitlistRows).toHaveLength(0);
+  });
 });
