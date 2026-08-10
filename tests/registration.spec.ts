@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { createFamily, createStudent, queryDb, selectFromSelect2, uniqueFamilyDetails } from './helpers';
+import { createFamily, createStudent, queryDb, runWpCli, selectFromSelect2, uniqueFamilyDetails } from './helpers';
 
 // Depends on the fixture data imported by `task test:seed` (see
 // tests/fixtures/e2e-products.json / e2e-sessions.json and the `usctdp
@@ -313,5 +313,168 @@ test('registers two students for the same session in a single checkout, paying l
   }
   for (const row of ledgerRows) {
     expect(row.event_id).toBe('order_payment_pay_later');
+  }
+});
+
+test('applies per-item discounts to the WooCommerce order when paying by card', async ({ page }) => {
+  // Regression test for create_woocommerce_order (class-usctdp-mgmt-
+  // woocommerce.php): its discount/house-credit fee blocks used to sit
+  // AFTER the line-item foreach, reading the stale $line_item from the
+  // final iteration - so only the LAST line item's discounts ever reached
+  // the WC order. The shape below is exactly the case that broke: the
+  // discounted registration added first, an undiscounted one added last.
+  // Only the card path is affected (ajax_submit_payment only builds a WC
+  // order for payment_method === 'card'; cash/check/pay_later go straight
+  // to the ledger, which was always per-item).
+  //
+  // Two students + card checkout + WC-order verification is roughly double
+  // the work of the other tests here - the shared 60s budget (set for
+  // single-registration flows) isn't enough on a cold stack.
+  test.setTimeout(120_000);
+
+  const family = uniqueFamilyDetails();
+  await createFamily(page, family);
+
+  const studentOne = {
+    firstName: 'JuniorAlpha',
+    lastName: family.lastName,
+    birthdate: '2015-06-01',
+    level: 'Beginner',
+  };
+  await createStudent(page, studentOne);
+
+  const studentTwo = {
+    firstName: 'JuniorBravo',
+    lastName: family.lastName,
+    birthdate: '2016-06-01',
+    level: 'Beginner',
+  };
+  await createStudent(page, studentTwo);
+
+  await page.goto('/wp/wp-admin/admin.php?page=usctdp-admin-register');
+
+  // First student: sibling discount, 10% of the fixture's $100 one-day
+  // price = $10 off (SiblingDiscount.amount() floors the product). The
+  // sibling controls live in #clinic-only-discounts, revealed by
+  // bind_clinic_info once the clinic activity's preregistration loads.
+  // Checking the box fires update_sale_price with the percent select's
+  // default ("10") already in place; the explicit selectOption pins the
+  // value rather than relying on the <option> order.
+  await selectFromSelect2(page, 'family-selector', family.lastName);
+  await selectFromSelect2(page, 'student-selector', studentOne.firstName);
+  await selectFromSelect2(page, 'session-selector', 'Test Session');
+  await selectFromSelect2(page, 'clinic-selector', 'Test Clinic');
+  await selectFromSelect2(page, 'activity-selector', 'Test Clinic');
+  await expect(page.locator('#activity-preorder')).toBeVisible();
+  await expect(page.locator('#clinic-only-discounts')).toBeVisible();
+  await page.locator('#discount-sibling').check();
+  await page.locator('#discount-sibling-percent').selectOption('10');
+  await expect(page.locator('#sale-price-value')).toHaveText('$90.00');
+  await page.locator('#add-activity-registration').click();
+  await expect(page.locator('#payment-table-section')).toBeVisible();
+
+  // Second student: NO discount, added last (see the two-student pay_later
+  // test above for why session/clinic/activity must all be re-picked).
+  // loadClinicRegistration resets the page-level `discounts` array when the
+  // activity loads; the $100.00 sale-price check guards that the first
+  // student's discount didn't leak onto this line item.
+  await selectFromSelect2(page, 'student-selector', studentTwo.firstName);
+  await selectFromSelect2(page, 'session-selector', 'Test Session');
+  await selectFromSelect2(page, 'clinic-selector', 'Test Clinic');
+  await selectFromSelect2(page, 'activity-selector', 'Test Clinic');
+  await expect(page.locator('#activity-preorder')).toBeVisible();
+  await expect(page.locator('#sale-price-value')).toHaveText('$100.00');
+  await page.locator('#add-activity-registration').click();
+
+  // Card, like cash, stays disabled until the full amount is moved to
+  // "Pay"; same transfer-all + retried select-and-click pattern as the
+  // cash test above.
+  await page.locator('#payment-table-section .transfer-all').click();
+  await page.locator('#payment-table-section .checkout-btn').click();
+
+  await expect(async () => {
+    await page.locator('#__usctdp_payment_payment_method').selectOption('card');
+    await page.locator('#__usctdp_payment_submit-payment-btn').click({ timeout: 2000 });
+  }).toPass({ timeout: 20_000 });
+
+  // Card path: ajax_submit_payment creates a pending WC order and returns
+  // its checkout payment URL; payment_checkout_handler (class-usctdp-mgmt-
+  // admin.php) then switches the session to the family's WP user and
+  // redirects there. No gateway needs to be configured for the pending
+  // order + order-pay page to exist.
+  await page.waitForURL(/order-pay\/\d+/);
+  const orderId = Number(page.url().match(/order-pay\/(\d+)/)![1]);
+  expect(orderId).toBeGreaterThan(0);
+
+  // WC-side verification: both $100 line items, plus the first student's
+  // discount as a negative fee line. Order items/itemmeta live in the same
+  // tables regardless of whether HPOS is enabled, so query those directly;
+  // the order total goes through wc_get_order() to stay storage-agnostic.
+  const orderItems = queryDb(
+    `SELECT order_item_id, order_item_name, order_item_type FROM wp_woocommerce_order_items WHERE order_id=${orderId}`
+  );
+  const wcLineItems = orderItems.filter((r) => r.order_item_type === 'line_item');
+  const wcFeeItems = orderItems.filter((r) => r.order_item_type === 'fee');
+  expect(wcLineItems).toHaveLength(2);
+  expect(wcFeeItems).toHaveLength(1);
+  expect(wcFeeItems[0].order_item_name).toBe('Sibling Discount');
+
+  for (const wcLineItem of wcLineItems) {
+    const [lineTotal] = queryDb(
+      `SELECT meta_value FROM wp_woocommerce_order_itemmeta WHERE order_item_id=${wcLineItem.order_item_id} AND meta_key='_line_total'`
+    );
+    expect(Number(lineTotal.meta_value)).toBe(100);
+  }
+  const [feeTotal] = queryDb(
+    `SELECT meta_value FROM wp_woocommerce_order_itemmeta WHERE order_item_id=${wcFeeItems[0].order_item_id} AND meta_key='_line_total'`
+  );
+  expect(Number(feeTotal.meta_value)).toBe(-10);
+
+  const orderTotal = runWpCli(['eval', `echo wc_get_order(${orderId})->get_total();`]);
+  expect(Number(orderTotal)).toBe(190);
+
+  // Ledger-side verification: the discounted purchase gets the charge pair
+  // plus a discount adjustment pair (build_ledger_entries_for_line_item);
+  // the undiscounted one gets just the charge pair. Card orders write no
+  // payment legs at submit time (payment completes later via the WC
+  // gateway hooks), and every row is tagged with the WC order.
+  const [studentOneRow] = queryDb(
+    `SELECT id FROM wp_usctdp_student WHERE first='${studentOne.firstName}' AND last='${studentOne.lastName}'`
+  );
+  const [studentTwoRow] = queryDb(
+    `SELECT id FROM wp_usctdp_student WHERE first='${studentTwo.firstName}' AND last='${studentTwo.lastName}'`
+  );
+  const [registrationOne] = queryDb(
+    `SELECT * FROM wp_usctdp_registration WHERE student_id=${studentOneRow.id} AND status='active'`
+  );
+  const [registrationTwo] = queryDb(
+    `SELECT * FROM wp_usctdp_registration WHERE student_id=${studentTwoRow.id} AND status='active'`
+  );
+  expect(registrationOne).toBeTruthy();
+  expect(registrationTwo).toBeTruthy();
+
+  const [purchaseOne] = queryDb(`SELECT * FROM wp_usctdp_purchase WHERE id=${registrationOne.purchase_id}`);
+  expect(purchaseOne.discounts).toContain('sibling_10');
+
+  const ledgerOneRows = queryDb(`SELECT * FROM wp_usctdp_ledger WHERE purchase_id=${registrationOne.purchase_id}`);
+  expect(ledgerOneRows).toHaveLength(4);
+  const chargeFee = ledgerOneRows.find((r) => r.entry_type === 'charge' && r.account === 'registration_fees');
+  const chargeRevenue = ledgerOneRows.find((r) => r.entry_type === 'charge' && r.account === 'revenue');
+  const adjustmentFee = ledgerOneRows.find((r) => r.entry_type === 'adjustment' && r.account === 'registration_fees');
+  const adjustmentRevenue = ledgerOneRows.find((r) => r.entry_type === 'adjustment' && r.account === 'revenue');
+  expect(Number(chargeFee?.debit)).toBe(100);
+  expect(Number(chargeRevenue?.credit)).toBe(100);
+  expect(Number(adjustmentFee?.credit)).toBe(10);
+  expect(Number(adjustmentRevenue?.debit)).toBe(10);
+  expect(adjustmentFee?.description).toBe('Sibling Discount');
+
+  const ledgerTwoRows = queryDb(`SELECT * FROM wp_usctdp_ledger WHERE purchase_id=${registrationTwo.purchase_id}`);
+  expect(ledgerTwoRows).toHaveLength(2);
+  expect(Number(ledgerTwoRows.find((r) => r.account === 'registration_fees')?.debit)).toBe(100);
+  expect(Number(ledgerTwoRows.find((r) => r.account === 'revenue')?.credit)).toBe(100);
+
+  for (const row of [...ledgerOneRows, ...ledgerTwoRows]) {
+    expect(row.event_id).toBe(`order_card_${orderId}`);
+    expect(Number(row.order_id)).toBe(orderId);
   }
 });
