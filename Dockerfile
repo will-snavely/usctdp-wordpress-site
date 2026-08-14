@@ -44,27 +44,25 @@ WORKDIR /www/srv/$PROJECT
 COPY --chown=root:root projects/$PROJECT ./
 COPY --from=node-builder --chown=root:root /build/$PROJECT/web/app/themes/$THEME/public ./web/app/themes/$THEME/public
 COPY --from=node-builder --chown=root:root /build/$PROJECT/web/app/plugins/usctdp-mgmt/dist ./web/app/plugins/usctdp-mgmt/dist 
-# The advanced-cache.php/object-cache.php symlinks below were briefly
-# removed (2026-08-14) after Acorn's own View::makeLoader() macro - which
-# silently trusted an unchecked file_put_contents() when generating a
-# WooCommerce Blade template loader - caused an uncaught fatal on
-# /my-account/ during a burst of concurrent requests racing to compile the
-# same view against a cold, just-wiped web/app/cache/acorn right after a
-# deploy. Re-enabled now that ThemeServiceProvider::fixMakeLoaderMacro()
-# overrides Acorn's macro with an atomic-write version that can't produce
-# that half-written state. web/app/cache/acorn stays ephemeral, wiped on
-# every container recreate same as before - deliberately not persisted in
-# a volume, since Blade's mtime-based staleness check can't be trusted to
-# reliably invalidate a persisted cache against a fresh git checkout (every
-# file's mtime resets to checkout time regardless of whether its content
-# changed), and a stale compiled view surviving past the deploy that
-# changed it is worse than a cold cache. Instead, `wp-deploy` (see
-# Taskfile.prod.yml) now warms the cache explicitly and sequentially as
-# part of the deploy itself - `wp acorn view:cache` for ordinary Blade
-# views, plus real requests to the WooCommerce-Blade-bridged pages - so
-# the first real compile of each view happens once, deliberately, before
-# traffic can race on it, rather than statefully carrying compiled output
-# between deploys.
+# The advanced-cache.php/object-cache.php symlinks caused two uncaught
+# fatals on /my-account/ (WC_Shortcode_My_Account -> wc_get_template()).
+# Root cause: wc_get_template()/wc_get_template_part() (WooCommerce's own
+# wc-core-functions.php) cache the *resolved path* of a template -
+# including generoi/sage-woocommerce's Acorn/Blade "loader" files - via
+# wp_cache_get/set(..., 'woocommerce'), with no awareness that the path
+# can point into web/app/cache/acorn, which is ephemeral and wiped on
+# every web container restart. Harmless without a persistent object cache
+# (that cache reset every request anyway), but with Redis on, the cached
+# path survives past the restart that wiped the file it points to - the
+# next request gets a cache hit, skips template resolution entirely, and
+# hands wc_get_template() a path that no longer exists. Fixed in
+# application.php via WP_REDIS_IGNORED_GROUPS => ['woocommerce'], which
+# keeps that one cache group non-persistent while everything else stays
+# Redis-backed. ThemeServiceProvider::fixMakeLoaderMacro() (an atomic-
+# write fix for a real but separate bug in Acorn's makeLoader()) is
+# unrelated to what actually caused these two incidents - it only helps
+# when makeLoader() runs at all, and the cache hit above means it never
+# got called - but it's a real improvement on its own, so it stays.
 RUN mkdir -p web/app/uploads \
              web/app/cache/acorn/framework/cache \
              web/app/cache/acorn/framework/views \
@@ -74,9 +72,9 @@ RUN mkdir -p web/app/uploads \
     chown -R www-data:www-data web/app/uploads web/app/cache web/app/settings /var/run/apache2 /var/log/apache2 /var/lock/apache2 && \
     chmod -R 775 web/app/uploads web/app/cache web/app/settings && \
     chmod 664 /www/srv/usctdp-bedrock/web/app/debug.log && \
-    composer install --no-interaction --no-scripts --no-ansi --optimize-autoloader --no-dev
-    # RUN ln -sf plugins/cache-enabler/advanced-cache.php web/app/advanced-cache.php && \
-    #     ln -sf plugins/redis-cache/includes/object-cache.php web/app/object-cache.php
+    composer install --no-interaction --no-scripts --no-ansi --optimize-autoloader --no-dev && \
+    ln -sf plugins/cache-enabler/advanced-cache.php web/app/advanced-cache.php && \
+    ln -sf plugins/redis-cache/includes/object-cache.php web/app/object-cache.php
 
 WORKDIR $THEME_ROOT
 RUN composer install --no-interaction --no-scripts --no-ansi --optimize-autoloader --no-dev
