@@ -44,6 +44,27 @@ WORKDIR /www/srv/$PROJECT
 COPY --chown=root:root projects/$PROJECT ./
 COPY --from=node-builder --chown=root:root /build/$PROJECT/web/app/themes/$THEME/public ./web/app/themes/$THEME/public
 COPY --from=node-builder --chown=root:root /build/$PROJECT/web/app/plugins/usctdp-mgmt/dist ./web/app/plugins/usctdp-mgmt/dist 
+# The advanced-cache.php/object-cache.php symlinks below were briefly
+# removed (2026-08-14) after Acorn's own View::makeLoader() macro - which
+# silently trusted an unchecked file_put_contents() when generating a
+# WooCommerce Blade template loader - caused an uncaught fatal on
+# /my-account/ during a burst of concurrent requests racing to compile the
+# same view against a cold, just-wiped web/app/cache/acorn right after a
+# deploy. Re-enabled now that ThemeServiceProvider::fixMakeLoaderMacro()
+# overrides Acorn's macro with an atomic-write version that can't produce
+# that half-written state. web/app/cache/acorn stays ephemeral, wiped on
+# every container recreate same as before - deliberately not persisted in
+# a volume, since Blade's mtime-based staleness check can't be trusted to
+# reliably invalidate a persisted cache against a fresh git checkout (every
+# file's mtime resets to checkout time regardless of whether its content
+# changed), and a stale compiled view surviving past the deploy that
+# changed it is worse than a cold cache. Instead, `wp-deploy` (see
+# Taskfile.prod.yml) now warms the cache explicitly and sequentially as
+# part of the deploy itself - `wp acorn view:cache` for ordinary Blade
+# views, plus real requests to the WooCommerce-Blade-bridged pages - so
+# the first real compile of each view happens once, deliberately, before
+# traffic can race on it, rather than statefully carrying compiled output
+# between deploys.
 RUN mkdir -p web/app/uploads \
              web/app/cache/acorn/framework/cache \
              web/app/cache/acorn/framework/views \
@@ -53,22 +74,9 @@ RUN mkdir -p web/app/uploads \
     chown -R www-data:www-data web/app/uploads web/app/cache web/app/settings /var/run/apache2 /var/log/apache2 /var/lock/apache2 && \
     chmod -R 775 web/app/uploads web/app/cache web/app/settings && \
     chmod 664 /www/srv/usctdp-bedrock/web/app/debug.log && \
-    composer install --no-interaction --no-scripts --no-ansi --optimize-autoloader --no-dev
-    # Cache drop-ins (advanced-cache.php / object-cache.php) disabled as of
-    # 2026-08-14: generoi/sage-woocommerce's WooCommerce-template-to-Blade
-    # bridge (Roots\Acorn\View\ViewServiceProvider::makeLoader()) writes its
-    # loader file via a bare file_put_contents() with no return-value check -
-    # when that write fails/races, it still returns the (unwritten) path,
-    # WooCommerce's wc_get_template() includes it, and Acorn's warning-to-
-    # ErrorException handler turns the resulting include() failure into an
-    # uncaught fatal. Hit in production on /my-account/ (WC_Shortcode_My_
-    # Account -> wc_get_template('myaccount/form-login.php')), root cause in
-    # makeLoader() not fully understood yet. Re-add these two lines (and see
-    # git history for this comment) once that's fixed/worked around - nothing
-    # else needs to change, WP_CACHE/WP_REDIS_HOST are harmless no-ops
-    # without the drop-in files actually present.
-    # RUN ln -sf plugins/cache-enabler/advanced-cache.php web/app/advanced-cache.php && \
-    #     ln -sf plugins/redis-cache/includes/object-cache.php web/app/object-cache.php
+    composer install --no-interaction --no-scripts --no-ansi --optimize-autoloader --no-dev && \
+    ln -sf plugins/cache-enabler/advanced-cache.php web/app/advanced-cache.php && \
+    ln -sf plugins/redis-cache/includes/object-cache.php web/app/object-cache.php
 
 WORKDIR $THEME_ROOT
 RUN composer install --no-interaction --no-scripts --no-ansi --optimize-autoloader --no-dev

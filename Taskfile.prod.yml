@@ -125,3 +125,22 @@ tasks:
       # "Redis object cache already enabled." and exit - harmless, but
       # doesn't do anything the symlink hasn't already done, so it's skipped.
       - "{{.WP_CLI}} theme activate usctdp-theme"
+      - "{{.WP_CLI}} acorn view:cache"
+      - "{{.WP_CLI}} acorn config:cache"
+      # `view:cache` above only covers Laravel's normal view-discovery
+      # path - it doesn't know about generoi/sage-woocommerce's WooCommerce-
+      # template-to-Blade bridge (View::makeLoader(), see
+      # ThemeServiceProvider::fixMakeLoaderMacro()), which only runs
+      # reactively when wc_get_template() is actually called for a matching
+      # template. These pages are the ones with a Blade override under
+      # web/app/themes/usctdp-theme/resources/views/woocommerce/ - hitting
+      # each once here, sequentially, during the deploy means the first
+      # compile happens in a controlled context instead of racing real
+      # concurrent traffic (the trigger for the 2026-08-14 /my-account/
+      # outage). `|| true` on each: a warming request failing shouldn't
+      # block the deploy, the atomic-write fix in fixMakeLoaderMacro()
+      # is what actually has to hold if this step is ever skipped/misses one.
+      - curl -sfo /dev/null https://usctdp.com/ || true
+      - curl -sfo /dev/null https://usctdp.com/shop/ || true
+      - curl -sfo /dev/null https://usctdp.com/cart/ || true
+      - curl -sfo /dev/null https://usctdp.com/my-account/ || true
