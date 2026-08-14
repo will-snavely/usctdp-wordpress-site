@@ -53,9 +53,22 @@ RUN mkdir -p web/app/uploads \
     chown -R www-data:www-data web/app/uploads web/app/cache web/app/settings /var/run/apache2 /var/log/apache2 /var/lock/apache2 && \
     chmod -R 775 web/app/uploads web/app/cache web/app/settings && \
     chmod 664 /www/srv/usctdp-bedrock/web/app/debug.log && \
-    composer install --no-interaction --no-scripts --no-ansi --optimize-autoloader --no-dev && \
-    ln -sf plugins/cache-enabler/advanced-cache.php web/app/advanced-cache.php && \
-    ln -sf plugins/redis-cache/includes/object-cache.php web/app/object-cache.php
+    composer install --no-interaction --no-scripts --no-ansi --optimize-autoloader --no-dev
+    # Cache drop-ins (advanced-cache.php / object-cache.php) disabled as of
+    # 2026-08-14: generoi/sage-woocommerce's WooCommerce-template-to-Blade
+    # bridge (Roots\Acorn\View\ViewServiceProvider::makeLoader()) writes its
+    # loader file via a bare file_put_contents() with no return-value check -
+    # when that write fails/races, it still returns the (unwritten) path,
+    # WooCommerce's wc_get_template() includes it, and Acorn's warning-to-
+    # ErrorException handler turns the resulting include() failure into an
+    # uncaught fatal. Hit in production on /my-account/ (WC_Shortcode_My_
+    # Account -> wc_get_template('myaccount/form-login.php')), root cause in
+    # makeLoader() not fully understood yet. Re-add these two lines (and see
+    # git history for this comment) once that's fixed/worked around - nothing
+    # else needs to change, WP_CACHE/WP_REDIS_HOST are harmless no-ops
+    # without the drop-in files actually present.
+    # RUN ln -sf plugins/cache-enabler/advanced-cache.php web/app/advanced-cache.php && \
+    #     ln -sf plugins/redis-cache/includes/object-cache.php web/app/object-cache.php
 
 WORKDIR $THEME_ROOT
 RUN composer install --no-interaction --no-scripts --no-ansi --optimize-autoloader --no-dev
