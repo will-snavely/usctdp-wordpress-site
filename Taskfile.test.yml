@@ -33,10 +33,20 @@ tasks:
       # write access to the parent dir) sidesteps that; the container
       # re-hardens the fresh copy on next up.
       - rm -f {{.TEST_PROJECTS_DIR}}/usctdp-bedrock/web/.htaccess
+      # web/app/{object-cache,advanced-cache}.php are dev's real, runtime-
+      # written drop-ins (unlike prod, which symlinks them at Docker build
+      # time) - excluded for the same reason as cache/uploads/.env below:
+      # this tree is meant to be a clean environment, and the test stack
+      # doesn't run a redis container. Without this exclude, a copied-in
+      # object-cache.php makes WordPress try to load it regardless of
+      # WP_REDIS_HOST being unset here, falling back to the drop-in's own
+      # default of 127.0.0.1:6379 and failing every WP-CLI/HTTP request.
       - >
         rsync -a
         --exclude='.git' --exclude='node_modules'
         --exclude='web/app/cache' --exclude='web/app/uploads' --exclude='.env'
+        --exclude='web/app/object-cache.php' --exclude='web/app/advanced-cache.php'
+        --exclude='web/app/settings'
         projects/usctdp-bedrock/ {{.TEST_PROJECTS_DIR}}/usctdp-bedrock/
       # Minimal test-only fixtures (one clinic, one session, one priced
       # activity) for `wp usctdp import_products`/`import_sessions` - kept
