@@ -46,13 +46,16 @@ COPY --from=node-builder --chown=root:root /build/$PROJECT/web/app/themes/$THEME
 COPY --from=node-builder --chown=root:root /build/$PROJECT/web/app/plugins/usctdp-mgmt/dist ./web/app/plugins/usctdp-mgmt/dist 
 RUN mkdir -p web/app/uploads \
              web/app/cache/acorn/framework/cache \
-             web/app/cache/acorn/framework/views && \
+             web/app/cache/acorn/framework/views \
+             web/app/settings/cache-enabler && \
     touch /www/srv/usctdp-bedrock/web/app/debug.log && \
     chown www-data:www-data /www/srv/usctdp-bedrock/web/app/debug.log && \
-    chown -R www-data:www-data web/app/uploads web/app/cache /var/run/apache2 /var/log/apache2 /var/lock/apache2 && \
-    chmod -R 775 web/app/uploads web/app/cache && \
+    chown -R www-data:www-data web/app/uploads web/app/cache web/app/settings /var/run/apache2 /var/log/apache2 /var/lock/apache2 && \
+    chmod -R 775 web/app/uploads web/app/cache web/app/settings && \
     chmod 664 /www/srv/usctdp-bedrock/web/app/debug.log && \
-    composer install --no-interaction --no-scripts --no-ansi --optimize-autoloader --no-dev
+    composer install --no-interaction --no-scripts --no-ansi --optimize-autoloader --no-dev && \
+    ln -sf plugins/cache-enabler/advanced-cache.php web/app/advanced-cache.php && \
+    ln -sf plugins/redis-cache/includes/object-cache.php web/app/object-cache.php
 
 WORKDIR $THEME_ROOT
 RUN composer install --no-interaction --no-scripts --no-ansi --optimize-autoloader --no-dev

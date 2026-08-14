@@ -116,4 +116,11 @@ tasks:
       - "{{.WP_CLI}} plugin activate wp-mail-smtp"
       - "{{.WP_CLI}} plugin activate two-factor"
       - "{{.WP_CLI}} plugin activate seo-by-rank-math"
+      - "{{.WP_CLI}} plugin activate redis-cache"
+      - "{{.WP_CLI}} plugin activate cache-enabler"
+      # No `wp redis enable` step here (unlike dev's deploy task) - the
+      # Dockerfile symlinks object-cache.php/advanced-cache.php into web/app/
+      # at build time, as root, since www-data can't write to web/app's root
+      # at runtime here. Running `wp redis enable` afterward as www-data
+      # would just fail trying to overwrite that root-owned symlink.
       - "{{.WP_CLI}} theme activate usctdp-theme"

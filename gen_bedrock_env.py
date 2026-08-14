@@ -40,6 +40,12 @@ def build_config(env, out_path, project):
         config["DB_PASSWORD"] = f.read().strip()
     config["DB_HOST"] = "db:3306"
 
+    # Internal-only Docker network hostname (the `redis` compose service),
+    # same reasoning as DB_HOST above - not something a deployer needs to
+    # set via .env.prod, so it's hardcoded rather than read from env.
+    config["REDIS_HOST"] = "redis"
+    config["REDIS_PORT"] = "6379"
+
     config["WP_ENV"] = env.get("WP_ENV")
     config["WP_DEBUG"] = env.get("WP_DEBUG")
     config["WP_DEBUG_DISPLAY"] = env.get("WP_DEBUG_DISPLAY")
