@@ -74,9 +74,9 @@ RUN mkdir -p web/app/uploads \
     chown -R www-data:www-data web/app/uploads web/app/cache web/app/settings /var/run/apache2 /var/log/apache2 /var/lock/apache2 && \
     chmod -R 775 web/app/uploads web/app/cache web/app/settings && \
     chmod 664 /www/srv/usctdp-bedrock/web/app/debug.log && \
-    composer install --no-interaction --no-scripts --no-ansi --optimize-autoloader --no-dev && \
-    ln -sf plugins/cache-enabler/advanced-cache.php web/app/advanced-cache.php && \
-    ln -sf plugins/redis-cache/includes/object-cache.php web/app/object-cache.php
+    composer install --no-interaction --no-scripts --no-ansi --optimize-autoloader --no-dev
+    # RUN ln -sf plugins/cache-enabler/advanced-cache.php web/app/advanced-cache.php && \
+    #     ln -sf plugins/redis-cache/includes/object-cache.php web/app/object-cache.php
 
 WORKDIR $THEME_ROOT
 RUN composer install --no-interaction --no-scripts --no-ansi --optimize-autoloader --no-dev
