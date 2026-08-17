@@ -1,5 +1,13 @@
 import { test, expect } from '@playwright/test';
-import { createFamily, createStudent, queryDb, runWpCli, selectFromSelect2, uniqueFamilyDetails } from './helpers';
+import {
+  createFamily,
+  createStudent,
+  queryDb,
+  runWpCli,
+  selectFromSelect2,
+  switchToUser,
+  uniqueFamilyDetails,
+} from './helpers';
 
 // Depends on the fixture data imported by `task test:seed` (see
 // tests/fixtures/e2e-products.json / e2e-sessions.json and the `usctdp
@@ -476,5 +484,162 @@ test('applies per-item discounts to the WooCommerce order when paying by card', 
   for (const row of [...ledgerOneRows, ...ledgerTwoRows]) {
     expect(row.event_id).toBe(`order_card_${orderId}`);
     expect(Number(row.order_id)).toBe(orderId);
+  }
+});
+
+// The two tests below drive the actual storefront checkout (not the admin
+// register page above) and force the resulting order straight to
+// 'failed'/'cancelled' rather than driving a real decline through a
+// gateway - WooCommerce doesn't distinguish *why* an order reached that
+// status, so this exercises the exact same hook a genuine decline or a
+// customer-initiated cancellation would, without needing any gateway
+// configured or real payment credentials.
+//
+// This deliberately isn't the admin register page: create_purchase_and_
+// registration() (class-usctdp-mgmt-admin-ajax.php, used by every test
+// above) creates registrations as 'active' immediately regardless of
+// payment method - there's no 'pending' stage for it to release, so
+// release_registrations_for_order() (class-usctdp-mgmt-woocommerce-hooks.php:1570)
+// never has anything to do there. 'pending' registrations - the ones that
+// hook actually reacts to - only come from after_checkout_validation(),
+// which is the *storefront* checkout's woocommerce_after_checkout_validation
+// handler, reserving a seat before an order even exists (see also
+// class-usctdp-void-stale-registrations.php's docblock, which spells out
+// this same distinction from the other side - abandoned-before-any-order
+// cleanup rather than failed/cancelled-order cleanup).
+//
+// BACS (bank transfer) rather than COD as the payment method: COD is WC's
+// zero-integration gateway and drives the order straight to 'processing'
+// as part of the same checkout submission (see Taskfile.test.yml's seed
+// task), which would fire confirm_registration() (pending -> active)
+// before this test ever gets a chance to force a failure. BACS lands on
+// 'on-hold' instead - not 'processing', so the registration stays
+// 'pending' - giving a real window to force-fail/cancel from. BACS isn't
+// pre-enabled by seed (only COD is), so each test enables/disables it
+// itself rather than depending on stack-wide state.
+test('voids the registration when a storefront order fails', async ({ page }) => {
+  const family = uniqueFamilyDetails();
+  await createFamily(page, family);
+
+  const student = {
+    firstName: 'Junior',
+    lastName: family.lastName,
+    birthdate: '2015-06-01',
+    level: 'Beginner',
+  };
+  await createStudent(page, student);
+
+  runWpCli([
+    'eval',
+    "$s = get_option('woocommerce_bacs_settings', array()); $s['enabled'] = 'yes'; update_option('woocommerce_bacs_settings', $s);",
+  ]);
+
+  try {
+    await switchToUser(page, family.email);
+
+    // Test Clinic's only fixture slot is Monday (tests/fixtures/e2e-sessions.json)
+    // - capacity-concurrency.spec.ts's "Friday" is its own dynamically
+    // inserted activity, not this one.
+    await page.goto('/product/test-clinic/');
+    await page.locator('#days-per-week').selectOption('One');
+    await selectFromSelect2(page, 'student_select', student.firstName);
+    await selectFromSelect2(page, 'day_of_week_1', 'Monday');
+    await page.locator('.single_add_to_cart_button').click();
+
+    await page.goto('/checkout/');
+    await page.locator('#billing_first_name').fill(student.firstName);
+    await page.locator('#billing_last_name').fill(student.lastName);
+    await page.locator('#billing_address_1').fill(family.address);
+    await page.locator('#billing_city').fill(family.city);
+    await page.locator('#billing_state').selectOption(family.state);
+    await page.locator('#billing_postcode').fill(family.zip);
+    await page.locator('#billing_email').fill(family.email);
+    await page.locator('#payment_method_bacs').check();
+    await page.locator('#place_order').click();
+
+    await page.waitForURL(/order-received/);
+    const orderId = Number(page.url().match(/order-received\/(\d+)/)![1]);
+    expect(orderId).toBeGreaterThan(0);
+
+    const [studentRow] = queryDb(
+      `SELECT id FROM wp_usctdp_student WHERE first='${student.firstName}' AND last='${student.lastName}'`
+    );
+    expect(studentRow).toBeTruthy();
+
+    const [pendingRegistration] = queryDb(`SELECT * FROM wp_usctdp_registration WHERE student_id=${studentRow.id}`);
+    expect(pendingRegistration).toBeTruthy();
+    expect(pendingRegistration.status).toBe('pending');
+
+    runWpCli(['eval', `$order = wc_get_order(${orderId}); $order->update_status('failed');`]);
+
+    const [registration] = queryDb(`SELECT * FROM wp_usctdp_registration WHERE id=${pendingRegistration.id}`);
+    expect(registration.status).toBe('void');
+  } finally {
+    runWpCli([
+      'eval',
+      "$s = get_option('woocommerce_bacs_settings', array()); $s['enabled'] = 'no'; update_option('woocommerce_bacs_settings', $s);",
+    ]);
+  }
+});
+
+test('voids the registration when a storefront order is cancelled', async ({ page }) => {
+  const family = uniqueFamilyDetails();
+  await createFamily(page, family);
+
+  const student = {
+    firstName: 'Junior',
+    lastName: family.lastName,
+    birthdate: '2015-06-01',
+    level: 'Beginner',
+  };
+  await createStudent(page, student);
+
+  runWpCli([
+    'eval',
+    "$s = get_option('woocommerce_bacs_settings', array()); $s['enabled'] = 'yes'; update_option('woocommerce_bacs_settings', $s);",
+  ]);
+
+  try {
+    await switchToUser(page, family.email);
+
+    await page.goto('/product/test-clinic/');
+    await page.locator('#days-per-week').selectOption('One');
+    await selectFromSelect2(page, 'student_select', student.firstName);
+    await selectFromSelect2(page, 'day_of_week_1', 'Monday');
+    await page.locator('.single_add_to_cart_button').click();
+
+    await page.goto('/checkout/');
+    await page.locator('#billing_first_name').fill(student.firstName);
+    await page.locator('#billing_last_name').fill(student.lastName);
+    await page.locator('#billing_address_1').fill(family.address);
+    await page.locator('#billing_city').fill(family.city);
+    await page.locator('#billing_state').selectOption(family.state);
+    await page.locator('#billing_postcode').fill(family.zip);
+    await page.locator('#billing_email').fill(family.email);
+    await page.locator('#payment_method_bacs').check();
+    await page.locator('#place_order').click();
+
+    await page.waitForURL(/order-received/);
+    const orderId = Number(page.url().match(/order-received\/(\d+)/)![1]);
+    expect(orderId).toBeGreaterThan(0);
+
+    const [studentRow] = queryDb(
+      `SELECT id FROM wp_usctdp_student WHERE first='${student.firstName}' AND last='${student.lastName}'`
+    );
+    expect(studentRow).toBeTruthy();
+
+    const [pendingRegistration] = queryDb(`SELECT * FROM wp_usctdp_registration WHERE student_id=${studentRow.id}`);
+    expect(pendingRegistration).toBeTruthy();
+    expect(pendingRegistration.status).toBe('pending');
+
+    runWpCli(['eval', `$order = wc_get_order(${orderId}); $order->update_status('cancelled');`]);
+
+    const [registration] = queryDb(`SELECT * FROM wp_usctdp_registration WHERE id=${pendingRegistration.id}`);
+    expect(registration.status).toBe('void');
+  } finally {
+    runWpCli([
+      'eval',
+      "$s = get_option('woocommerce_bacs_settings', array()); $s['enabled'] = 'no'; update_option('woocommerce_bacs_settings', $s);",
+    ]);
   }
 });
