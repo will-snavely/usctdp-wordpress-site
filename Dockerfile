@@ -32,6 +32,26 @@ FROM horsecatdog/bedrock:${BEDROCK_TAG}
 # patches are the one thing we always want the latest of on every rebuild.
 RUN apt-get update && apt-get upgrade -y && rm -rf /var/lib/apt/lists/*
 
+# Base-image Apache/PHP defaults are untuned for this droplet's size:
+# memory_limit ships as -1 (unlimited) and MaxRequestWorkers as 150 -
+# confirmed via `php -i` / mpm_prefork.conf in the dev image - which
+# together meant no real ceiling on how much RAM concurrent PHP requests
+# could consume. That's the most likely actual root cause of a production
+# swap-thrashing incident (Aug 2026), more so than anything tunable at the
+# compose/container level alone. See docker/apache/mpm_prefork.conf for
+# the full reasoning behind these specific numbers - they're sized to the
+# web service's current 1024M container memory limit
+# (sage_dev/compose.prod.yaml) and need revisiting together if that
+# changes. find+test guards against the base image bumping its PHP
+# version and this silently writing to a path that doesn't exist.
+COPY docker/apache/memory-limit.ini /tmp/usctdp-memory-limit.ini
+RUN set -e; \
+    conf_d=$(find /etc/php -maxdepth 3 -type d -path '*/apache2/conf.d'); \
+    [ -n "$conf_d" ] && [ -d "$conf_d" ] || { echo "ERROR: could not locate a single PHP apache2 conf.d directory under /etc/php - base image layout may have changed" >&2; exit 1; }; \
+    cp /tmp/usctdp-memory-limit.ini "$conf_d/99-usctdp-memory-limit.ini" && \
+    rm /tmp/usctdp-memory-limit.ini
+COPY docker/apache/mpm_prefork.conf /etc/apache2/mods-available/mpm_prefork.conf
+
 ARG PROJECT
 ARG THEME
 ENV PROJECT=$PROJECT
