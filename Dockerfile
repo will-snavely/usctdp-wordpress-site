@@ -40,7 +40,7 @@ RUN apt-get update && apt-get upgrade -y && rm -rf /var/lib/apt/lists/*
 # swap-thrashing incident (Aug 2026), more so than anything tunable at the
 # compose/container level alone. See docker/apache/mpm_prefork.conf for
 # the full reasoning behind these specific numbers - they're sized to the
-# web service's current 1024M container memory limit
+# web service's current 1536M container memory limit
 # (sage_dev/compose.prod.yaml) and need revisiting together if that
 # changes. find+test guards against the base image bumping its PHP
 # version and this silently writing to a path that doesn't exist.
