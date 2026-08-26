@@ -43,8 +43,8 @@ async function createSecondPricedActivity(uniqueTag: string): Promise<SecondActi
   // encoding - only title/search_term need to be distinct.
   const sessionTitle = `Test Session Alt ${uniqueTag}`;
   queryDb(`
-    INSERT INTO wp_usctdp_session (title, search_term, is_active, start_date, end_date, num_weeks, category, season, meta)
-    SELECT '${sessionTitle}', '${sessionTitle}', is_active, start_date, end_date, num_weeks, category, season, meta
+    INSERT INTO wp_usctdp_session (title, search_term, status, start_date, end_date, num_weeks, category, season, meta)
+    SELECT '${sessionTitle}', '${sessionTitle}', status, start_date, end_date, num_weeks, category, season, meta
     FROM wp_usctdp_session WHERE id = ${testClinic.session_id}
   `);
   const [session] = queryDb(`SELECT id FROM wp_usctdp_session WHERE title = '${sessionTitle}'`);
