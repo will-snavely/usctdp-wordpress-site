@@ -643,3 +643,87 @@ test('voids the registration when a storefront order is cancelled', async ({ pag
     ]);
   }
 });
+
+// Regression coverage for the activity 'status' column (see class-usctdp-
+// mgmt-activity-schema.php): add_day_selector() in usctdp-mgmt-product.js
+// drops a 'closed' clinic activity from the day dropdown entirely, as
+// though it didn't exist, rather than listing it disabled the way a full
+// one is. Only the storefront-visibility half of the feature - the
+// server-side after_checkout_validation()/validate_activity_status() guard
+// against actually completing a registration against a closed activity
+// isn't exercised here.
+test('closing a clinic activity hides it from the day dropdown, reopening restores it', async ({ page }) => {
+  const family = uniqueFamilyDetails();
+  await createFamily(page, family);
+
+  let activityId: string | undefined;
+  let groupId: string | undefined;
+
+  try {
+    // Same "first (session_id, product_id) pair for Test Clinic" lookup
+    // capacity-concurrency.spec.ts uses to insert its own dedicated
+    // fixture-adjacent activity.
+    const [testClinic] = queryDb(`
+      SELECT act.session_id AS session_id, act.product_id AS product_id, act.level AS level
+      FROM wp_usctdp_activity act
+      JOIN wp_usctdp_product prod ON act.product_id = prod.id
+      WHERE prod.title = 'Test Clinic'
+    `);
+    expect(testClinic).toBeTruthy();
+
+    queryDb(`INSERT INTO wp_usctdp_reservation_group (capacity, created_at, updated_at) VALUES (10, NOW(), NOW())`);
+    const [group] = queryDb(`SELECT id FROM wp_usctdp_reservation_group ORDER BY id DESC LIMIT 1`);
+    groupId = group.id;
+
+    // Saturday: the fixture's only slot is Monday, and capacity-
+    // concurrency.spec.ts's own dynamically-inserted/cleaned-up slot is
+    // Friday - this doesn't interact with either. New activities default to
+    // status='open' (the column's DB default), so it starts out visible.
+    const uniqueTag = `status-toggle-${Date.now()}`;
+    const title = `Test Clinic, Saturday, 9:00 AM to 9:45 AM (${uniqueTag})`;
+    queryDb(`
+      INSERT INTO wp_usctdp_activity (session_id, product_id, type, title, level, search_term, reservation_group_id)
+      VALUES (${testClinic.session_id}, ${testClinic.product_id}, 'clinic', '${title}', '${testClinic.level}', '${uniqueTag}', ${groupId})
+    `);
+    const [activity] = queryDb(`SELECT id FROM wp_usctdp_activity WHERE title = '${title}'`);
+    activityId = activity.id;
+    queryDb(
+      `INSERT INTO wp_usctdp_clinic (id, day_of_week, start_time, end_time) VALUES (${activityId}, 6, '09:00:00', '09:45:00')`
+    );
+
+    await switchToUser(page, family.email);
+
+    // add_day_selector() builds each <option>'s label client-side from
+    // day_of_week/start_time, not the DB row's `title` - "Saturday" is
+    // enough to identify it, and no other Test Clinic activity in this
+    // session uses that day. The day_of_week_1 <select> itself stays in the
+    // DOM (just hidden behind select2), so toContainText can read its
+    // options directly without opening the select2 popup - and it polls,
+    // so it naturally waits out the async /clinics/ fetch that populates it
+    // after 'found_variation' fires.
+    const daySelect = page.locator('#day_of_week_1');
+
+    await page.goto('/product/test-clinic/');
+    await page.locator('#days-per-week').selectOption('One');
+    await expect(daySelect).toContainText('Saturday');
+
+    queryDb(`UPDATE wp_usctdp_activity SET status = 'closed' WHERE id = ${activityId}`);
+    await page.reload();
+    await page.locator('#days-per-week').selectOption('One');
+    await expect(daySelect).not.toContainText('Saturday');
+
+    queryDb(`UPDATE wp_usctdp_activity SET status = 'open' WHERE id = ${activityId}`);
+    await page.reload();
+    await page.locator('#days-per-week').selectOption('One');
+    await expect(daySelect).toContainText('Saturday');
+  } finally {
+    if (activityId) {
+      queryDb(`DELETE FROM wp_usctdp_registration WHERE activity_id = ${activityId}`);
+      queryDb(`DELETE FROM wp_usctdp_clinic WHERE id = ${activityId}`);
+      queryDb(`DELETE FROM wp_usctdp_activity WHERE id = ${activityId}`);
+    }
+    if (groupId) {
+      queryDb(`DELETE FROM wp_usctdp_reservation_group WHERE id = ${groupId}`);
+    }
+  }
+});
