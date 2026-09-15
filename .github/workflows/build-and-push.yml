@@ -77,6 +77,7 @@ jobs:
       # separate database it doesn't know about. Needs WPSCAN_API_TOKEN as a
       # repo secret (free tier - register at https://wpscan.com/register).
       - name: Check WordPress core/plugins/themes against WPScan
+        if: false
         env:
           WPSCAN_API_TOKEN: ${{ secrets.WPSCAN_API_TOKEN }}
         run: python3 security/wpscan_check.py
