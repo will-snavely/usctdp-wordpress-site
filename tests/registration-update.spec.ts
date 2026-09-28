@@ -131,11 +131,12 @@ async function registerWithSiblingDiscount(page: import('@playwright/test').Page
 }
 
 /**
- * Puts a family's one registration row into edit mode and picks a new
- * session + activity - assumes exactly one purchase-card on the page
- * (a fresh test family's row is DataTables draw-index 0, so its selectors
- * are always...-selector-0, letting this reuse the shared selectFromSelect2
- * helper directly rather than resolving a dynamic per-row id).
+ * Opens the clinic "Modify Registration" modal for a family's one
+ * registration and picks a new session + clinic + activity (Day) - assumes
+ * exactly one purchase-card on the page, same as before. Unlike the old
+ * inline row-editing this replaced, the modal's Session -> Clinic -> Day
+ * cascade has its own separate "Clinic" (product) step in between, since
+ * that's how the register page's own cascade always worked too.
  *
  * Searches by the fixture's bare uniqueTag rather than the full session/
  * activity title: search_sessions()/search_activities() (class-usctdp-mgmt-
@@ -156,9 +157,11 @@ async function editRegistrationActivity(
 ) {
   await page.goto(`/wp/wp-admin/admin.php?page=usctdp-admin-history&family_id=${familyId}`);
   await page.locator('.edit-registration-btn').click();
-  await selectFromSelect2(page, 'session-selector-0', fixture.uniqueTag, fixture.sessionTitle);
-  await selectFromSelect2(page, 'activity-selector-0', fixture.uniqueTag, fixture.activityTitle);
-  await page.locator('.save-registration-btn').click();
+  await expect(page.locator('#modify-registration-modal')).toBeVisible();
+  await selectFromSelect2(page, 'modify-session-selector', fixture.uniqueTag, fixture.sessionTitle);
+  await selectFromSelect2(page, 'modify-clinic-selector', 'Test Clinic');
+  await selectFromSelect2(page, 'modify-activity-selector', fixture.uniqueTag, fixture.activityTitle);
+  await page.locator('#save-modify-registration-btn').click();
 }
 
 test.describe('Confirm Registration Update', () => {
