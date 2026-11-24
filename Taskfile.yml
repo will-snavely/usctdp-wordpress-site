@@ -88,3 +88,59 @@ tasks:
     cmds:
       - sudo chgrp -R usctdp_devs projects
       - sudo chmod -R g+rw projects
+
+  # Commits + pushes everything in the usctdp-mgmt plugin, then bumps and
+  # pushes its submodule pointer in usctdp-bedrock and in this repo.
+  # Parent commits include only the pointer - nothing else staged or
+  # modified there gets swept in.
+  #   task commit-plugin -- "fix roster regeneration"
+  commit-plugin:
+    desc: Commit and push usctdp-mgmt, then its pointer in both parent repos
+    silent: true
+    env:
+      COMMIT_MSG: '{{.CLI_ARGS}}'
+    cmds:
+      - |
+        set -euo pipefail
+        if [ -z "$COMMIT_MSG" ]; then
+          echo 'Usage: task commit-plugin -- "commit message"' >&2
+          exit 1
+        fi
+
+        BEDROCK=projects/usctdp-bedrock
+        PLUGIN_REL=web/app/plugins/usctdp-mgmt
+        PLUGIN="$BEDROCK/$PLUGIN_REL"
+
+        for repo in "$PLUGIN" "$BEDROCK" .; do
+          if ! git -C "$repo" symbolic-ref -q HEAD >/dev/null; then
+            echo "$repo is in detached HEAD - check out a branch first." >&2
+            exit 1
+          fi
+        done
+
+        echo "== usctdp-mgmt"
+        git -C "$PLUGIN" add -A
+        if git -C "$PLUGIN" diff --cached --quiet; then
+          echo "Nothing to commit in the plugin; pushing any unpushed commits."
+        else
+          git -C "$PLUGIN" commit -m "$COMMIT_MSG"
+        fi
+        git -C "$PLUGIN" push origin HEAD
+
+        echo "== usctdp-bedrock"
+        if git -C "$BEDROCK" diff --quiet -- "$PLUGIN_REL"; then
+          echo "Plugin pointer unchanged."
+        else
+          git -C "$BEDROCK" add "$PLUGIN_REL"
+          git -C "$BEDROCK" commit -m "usctdp-mgmt: $COMMIT_MSG" -- "$PLUGIN_REL"
+        fi
+        git -C "$BEDROCK" push origin HEAD
+
+        echo "== usctdp-wordpress-site"
+        if git diff --quiet -- "$BEDROCK"; then
+          echo "Bedrock pointer unchanged."
+        else
+          git add "$BEDROCK"
+          git commit -m "usctdp-mgmt: $COMMIT_MSG" -- "$BEDROCK"
+        fi
+        git push origin HEAD
